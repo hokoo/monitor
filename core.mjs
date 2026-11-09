@@ -14,15 +14,20 @@ export function validateConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config) || !['en', 'ru'].includes(config.locale ?? 'en') || !Array.isArray(config.accounts)) throw Error('invalid config');
   const ids = new Set();
   const zaiAuthRefs = new Set();
+  const codexAuthRefs = new Set();
   for (const account of config.accounts) {
     if (!validId(account.id) || !validText(account.provider) || !validText(account.label) || !Array.isArray(account.sources) || account.sources.length === 0 || ids.has(account.id)) throw Error('invalid config');
     ids.add(account.id);
     const sourceIds = new Set();
     for (const source of account.sources) {
-      if (!validId(source.id) || !['subscription', 'api'].includes(source.type) || !['demo', 'zai'].includes(source.adapter) || source.adapter === 'zai' && (source.type !== 'subscription' || typeof source.authRef !== 'string' || !/^env:[A-Z_][A-Z0-9_]*$/.test(source.authRef)) || sourceIds.has(source.id) || (source.minIntervalMs != null && (!Number.isInteger(source.minIntervalMs) || source.minIntervalMs < POLL_MS || source.minIntervalMs > 86400000)) || (source.staleAfterMs != null && (!Number.isInteger(source.staleAfterMs) || source.staleAfterMs < SECOND || source.staleAfterMs > 86400000)) || (source.authRef != null && (typeof source.authRef !== 'string' || !/^(env:[A-Z_][A-Z0-9_]*|local:[a-zA-Z0-9_-]+)$/.test(source.authRef)))) throw Error('invalid config');
+      if (!validId(source.id) || !['subscription', 'api'].includes(source.type) || !['demo', 'zai', 'codex'].includes(source.adapter) || source.adapter === 'zai' && (source.type !== 'subscription' || typeof source.authRef !== 'string' || !/^env:[A-Z_][A-Z0-9_]*$/.test(source.authRef)) || source.adapter === 'codex' && (source.type !== 'subscription' || typeof source.authRef !== 'string' || !/^local:[a-zA-Z0-9_-]{1,64}$/.test(source.authRef)) || sourceIds.has(source.id) || (source.minIntervalMs != null && (!Number.isInteger(source.minIntervalMs) || source.minIntervalMs < POLL_MS || source.minIntervalMs > 86400000)) || (source.staleAfterMs != null && (!Number.isInteger(source.staleAfterMs) || source.staleAfterMs < SECOND || source.staleAfterMs > 86400000)) || (source.authRef != null && (typeof source.authRef !== 'string' || !/^(env:[A-Z_][A-Z0-9_]*|local:[a-zA-Z0-9_-]{1,64})$/.test(source.authRef)))) throw Error('invalid config');
       if (source.adapter === 'zai') {
         if (zaiAuthRefs.has(source.authRef)) throw Error('invalid config');
         zaiAuthRefs.add(source.authRef);
+      }
+      if (source.adapter === 'codex') {
+        if (codexAuthRefs.has(source.authRef)) throw Error('invalid config');
+        codexAuthRefs.add(source.authRef);
       }
       sourceIds.add(source.id);
     }
@@ -73,6 +78,9 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
   for (const account of config.accounts) for (const source of account.sources) states.set(key(account.id, source.id), {metrics: new Map(), status: 'loading', safeError: null, lastAttemptAt: null, lastSuccessAt: null, nextAttemptAt: iso(now()), retryAfter: null, delayReason: 'initial', failures: 0, busy: false});
   let active = 0;
   let timer = null;
+  let stopped = false;
+  const controllers = new Set();
+  const attempts = new Set();
   async function attempt(account, source, state) {
     state.busy = true; active++;
     const started = now();
@@ -80,6 +88,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
     state.nextAttemptAt = null;
     state.status = state.lastSuccessAt ? state.status : 'loading';
     const controller = new AbortController();
+    controllers.add(controller);
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let readerPromise;
     try {
@@ -100,7 +109,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
       for (const metric of normalized) {
         const id = metricKey(metric);
         const previous = state.metrics.get(id);
-        if (source.adapter === 'zai' && metric.value == null && previous?.value != null) state.metrics.set(id, {...previous, missing: true});
+        if (['zai', 'codex'].includes(source.adapter) && metric.value == null && previous?.value != null) state.metrics.set(id, {...previous, missing: true});
         else if (result.passive && previous && (metric.snapshotAt && previous.snapshotAt === metric.snapshotAt || !metric.snapshotAt && metric.observedAt && previous.observedAt === metric.observedAt)) state.metrics.set(id, {...previous, missing: false});
         else state.metrics.set(id, {...metric, missing: false});
       }
@@ -117,16 +126,22 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
       state.retryAfter = failure.code === 'rate_limited' ? due : null;
       state.nextAttemptAt = due;
       state.delayReason = failure.code === 'auth' ? 'awaiting_retry' : failure.code === 'rate_limited' ? 'retry_after' : 'backoff';
-    } finally {clearTimeout(timeout); if (readerPromise) await readerPromise.catch(() => {}); state.busy = false; active--;}
+    } finally {clearTimeout(timeout); if (readerPromise) await readerPromise.catch(() => {}); controllers.delete(controller); state.busy = false; active--;}
   }
   function tick() {
+    if (stopped) return;
     for (const account of config.accounts) for (const source of account.sources) {
       const state = states.get(key(account.id, source.id));
       if (active >= concurrency) return;
-      if (!state.busy && state.nextAttemptAt && Date.parse(state.nextAttemptAt) <= now()) void attempt(account, source, state);
+      if (!state.busy && state.nextAttemptAt && Date.parse(state.nextAttemptAt) <= now()) {
+        const running = attempt(account, source, state);
+        attempts.add(running);
+        void running.finally(() => attempts.delete(running));
+      }
     }
   }
   function refresh() {
+    if (stopped) return;
     for (const state of states.values()) if (!state.busy && (state.status === 'auth' || state.delayReason === 'regular' || state.delayReason === 'initial')) {
       state.nextAttemptAt = iso(now()); state.delayReason = 'manual';
     }
@@ -137,8 +152,8 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
     return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, sources: account.sources.map(source => {
       const state = states.get(key(account.id, source.id));
       const maxAge = source.staleAfterMs ?? staleMs;
-      return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
+      return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : source.adapter === 'codex' ? 'Codex ChatGPT quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
     })}))};
   }
-  return {tick, refresh, snapshot, start() {tick(); timer = setInterval(tick, 1000);}, stop() {if (timer) clearInterval(timer); timer = null;}};
+  return {tick, refresh, snapshot, start() {stopped = false; tick(); timer = setInterval(tick, 1000);}, async stop() {stopped = true; if (timer) clearInterval(timer); timer = null; for (const controller of controllers) controller.abort(); await Promise.allSettled([...attempts]);}};
 }

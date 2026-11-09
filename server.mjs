@@ -5,6 +5,7 @@ import path from 'node:path';
 import {validateConfig, createMonitor} from './core.mjs';
 import {readDemo} from './demo.mjs';
 import {readZai} from './zai.mjs';
+import {readCodex} from './codex.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const assets = {'/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8']};
@@ -15,7 +16,7 @@ export function allowedRequest(req, port) {
   const origin = req.headers.origin;
   return req.method === 'POST' ? origin === `http://${host}` : !origin || origin === `http://${host}`;
 }
-export function createServer(config, {port = 8765, adapters = {demo: readDemo, zai: readZai}, monitor = createMonitor(config, adapters)} = {}) {
+export function createServer(config, {port = 8765, adapters = {demo: readDemo, zai: readZai, codex: readCodex}, monitor = createMonitor(config, adapters)} = {}) {
   let boundPort = port;
   const server = http.createServer(async (req, res) => {
     const headers = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"};
@@ -35,7 +36,7 @@ export function createServer(config, {port = 8765, adapters = {demo: readDemo, z
     }
     return send(404, 'Not found');
   });
-  return {server, monitor, listen() {return new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', () => {boundPort = server.address().port; monitor.start(); resolve(server.address());}));}, close() {monitor.stop(); return new Promise(resolve => server.close(resolve));}};
+  return {server, monitor, listen() {return new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', () => {boundPort = server.address().port; monitor.start(); resolve(server.address());}));}, async close() {await monitor.stop(); return new Promise(resolve => server.close(resolve));}};
 }
 export async function loadConfig(file = process.env.MONITOR_CONFIG || path.join(root, 'config.json')) {
   try {return validateConfig(JSON.parse(await readFile(file, 'utf8')));}
@@ -49,5 +50,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const app = createServer(config, {port});
     await app.listen();
     console.log(`Monitor listening on http://127.0.0.1:${port}`);
+    const stop = () => {void app.close().then(() => {process.exitCode = 0;});};
+    process.once('SIGINT', stop); process.once('SIGTERM', stop);
   } catch {console.error('Monitor could not start: check configuration and port'); process.exitCode = 1;}
 }

@@ -1,0 +1,8 @@
+{
+  "locale": "en",
+  "accounts": [
+    {"id": "chatgpt-one", "provider": "Codex", "label": "Personal", "sources": [{"id": "plan", "type": "subscription", "adapter": "codex", "authRef": "local:personal"}]},
+    {"id": "chatgpt-two", "provider": "Codex", "label": "Work", "sources": [{"id": "plan", "type": "subscription", "adapter": "codex", "authRef": "local:work"}]},
+    {"id": "glm", "provider": "Z.ai", "label": "GLM", "sources": [{"id": "plan", "type": "subscription", "adapter": "zai", "authRef": "env:ZAI_MONITOR_TOKEN"}]}
+  ]
+}

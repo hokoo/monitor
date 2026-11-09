@@ -122,6 +122,27 @@ Dependencies: T1, T2, доступные учётки Codex и API-проект�
 
 Notes/Risks: наличие двух GPT-аккаунтов само по себе не закрывает DoR или требование живой проверки API.
 
+### T3a. Codex: изолированные профили и чтение лимитов
+
+Status: completed
+Goal: дать каждому аккаунту Codex независимое подключение к монитору без переключения рабочих сессий.
+Scope: отдельный app-server stdio на профиль монитора, документированная авторизация в отдельном CODEX_HOME с file credential store, безопасный локальный вход, read account/rateLimits и нормализация всех возвращённых окон; конфигурация, инструкция и проверки.
+Out of Scope: OpenAI API, копирование рабочих токенов, модельные запросы, глобальный logout/изменение рабочих профилей; интерактивный вход выполняет пользователь.
+DoR: T2 принят; официальный механизм изоляции подтверждён исследованием; authRef — валидированный идентификатор внутри приватного игнорируемого каталога монитора, произвольные пути запрещены. Существующие логины не нужны для реализации/проверок протокола, нужны для живой приёмки.
+DoD: отдельный локальный коммит после тестов протокола/изоляции/ошибок/нормализации и затронутого UI, smoke установленного app-server на пустом изолированном профиле без модели; живая сверка отмечена отдельно, исходная T3 не закрывается без полного DoD.
+AC: один профиль не меняет другой или рабочий CLI, файловые креды/пути не выходят в браузер/логи/Git; все подтверждённые окна включая 5h, ноль и частичные данные обработаны честно; timeout/ошибка/выход child не блокируют другие источники; конкурентное владение одним auth-профилем не допускается; отсутствующий логин показывает необходимость входа, onboarding воспроизводим без передачи секрета в чат.
+Dependencies: T2, installed Codex0.167.0, официальные app-server/auth/environment docs; два интерактивных логина для родительской живой приёмки.
+Notes/Risks: отдельный CODEX_HOME здесь — документированный runtime-профиль приложения, не обход lifecycle лимитов. Явно file credentials, чтобы не переиспользовать рабочий keyring. Parent T3/API остаётся незавершённой.
+
+### Checkpoint T3a — 2026-11-09
+
+- Реализованы `codex.mjs`, `codex-login.mjs`, совмещённый пример двух Codex + одного GLM в `config.codex.example.json`; обновлены `core.mjs`, `server.mjs`, `public/app.js`, `.gitignore`, `README.md`, `test/codex.test.mjs`, `test/browser-check.mjs`, `test/smoke-codex.mjs`. Профили приватные, игнорируются Git; authRef — только alias. File store, отдельные child CODEX_HOME/cwd и очищенное окружение, проверка auth/config-файлов и эксклюзивный замок исключают переиспользование рабочих credentials. На каждое чтение запускается ограниченный по времени stdio child; замок снимается после его выхода. Рабочая авторизация не читалась и не менялась.
+- AC: проверены handshake/framing/RPC-ошибки, два профиля, запрет путей/дубликатов, отсутствие email/секретов/путей в снимке, все возвращённые buckets/windows, 5h только при 300 минутах, настоящий ноль, неизвестные/частичные данные и сохранение прежнего наблюдения как stale. Timeout/crash/abort освобождают child/замок; соседний источник работает независимо. По review исправлена гонка shutdown: stop блокирует поздние tick/refresh и ждёт завершения активного child. UI en/ru различает Codex, demo, отсутствие окон и необходимость входа.
+- Проверки monitor: `node --test --test-reporter=tap test/core.test.mjs test/server.test.mjs test/zai.test.mjs test/codex.test.mjs` с loopback-доступом — exit 0, **29/29**, 0 skipped; `/tmp/monitor-t3a-node-tests-escalated.log`. Первый запуск без нужного escalation (`node --test test/core.test.mjs test/server.test.mjs test/zai.test.mjs test/codex.test.mjs`) — exit 1, server.test failed без раскрытой причины; исходный лог сохранён `/tmp/monitor-t3a-node-tests.log`. `node test/browser-check.mjs` с browser/loopback-доступом — exit 0, JS errors отсутствуют, `/tmp/monitor-t3a-browser.log`; screenshots `/tmp/monitor-t2-{en,narrow,ru,states,states-ru}.png`. `node test/smoke-codex.mjs` — exit 0 (~1.2 с): установленный Codex0.167.0 инициализировался в пустом приватном tmp-профиле, потребовал вход, auth.json отсутствует; `/tmp/monitor-t3a-codex-smoke.log`. OAuth и модельные запросы не запускались.
+- Owner просмотрел фактический diff и raw-проверки: техническая приёмка T3a — pass. `git diff --check` exit 0; manifest `/tmp/monitor-t3a-worker.sha256` — 11/11 до/после monitor; затем по review root изменена только вводная строка README о доступности адаптеров без утверждения живого подключения. Код не менялся, runtime повтор не требовался; финальный manifest обновлён и совпал 11/11 у owner. PLAN bookkeeping вне manifest. Граница — проверенный diff поверх `3f4e38e`, доставка локальным коммитом с этим checkpoint; push/merge/публикации нет. Предшествующие правки root в PLAN сохранены.
+- Owner `/root/t3a_owner` (`01a1c02c-cb55-77e0-bda6-b590c0eb64db`); worker `/root/t3a_owner/implement` (`01a1c02d-bac3-7c60-aa44-392ccb5aa11f`); monitor `/root/t3a_owner/verify` (`01a1c03b-58d9-75c0-b2d2-b04021ea2388`). Оба специалиста completed; команды и owned child-процессы завершены, monitor подтвердил отсутствие оставшихся test/browser/app-server процессов. Lifecycle cleanup — root.
+- Ограничения: два настоящих интерактивных входа/сверка лимитов и latency авторизованного чтения не проверены; API отсутствует. После аварийного убийства возможен stale lock, инструкция требует сначала проверить отсутствие владельца. T3 и общая живая приёмка остаются открытыми; исключений нет. Следующий шаг — root принимает T3a и передаёт пользователю короткий onboarding из README; owner не начинает следующую задачу.
+
 ## T4. Подключить Claude
 
 Status: needs_design
@@ -236,3 +257,7 @@ Notes/Risks: имеющегося набора аккаунтов пока не�
 
 - Root принял T2 `0b1987b`, проверил core/server и RU screenshot, clean status. Оставшиеся worker/monitor/owner ветки T2 confirmed completed и archived exit 0.
 - T5a owner: `gpt-6.1-sol/high`, причина: небольшой адаптер с чувствительной авторизацией и неопределёнными полями; worker `gpt-6-sol/high`. Один writer, последовательная приёмка.
+
+- Root принял T5a на `3f4e38e`: фактический diff и raw19/19 test log проверены, браузерные свидетельства не затронуты ремонтом. Worker/monitor/owner confirmed completed и archived exit0. Live GLM недоступен: token не найден в process env и точечно проверенном известном Claude settings; значения не выводились.
+- Исследование `/root/codex_isolation` (`01a1c01c-d51b-7473-b228-c327c080b24e`) принято/archived exit0. [CODEX_HOME](https://learn.chatgpt.com/docs/config-file/environment-variables) изолирует app-server state; [file credential store](https://learn.chatgpt.com/docs/auth) явно сохраняет auth внутри него. Root открыл и проверил эти источники. Протокол: initialize/initialized, account/read(refreshToken:false), account/rateLimits/read; managed OAuth, один аккаунт на child. Копирование auth и экспериментальные внешние токены не используются.
+- T3a owner: `gpt-6.1-sol/high`, причина: изоляция OAuth/child lifecycle и разбор протокола требуют аккуратного ревью; worker `gpt-6-sol/high`, проверки serial после freeze.

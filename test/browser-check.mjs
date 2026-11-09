@@ -139,6 +139,24 @@ try {
     assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
     await stop();
   }
+  for (const locale of ['en','ru']) for (const mode of ['ok','empty','auth']) {
+    const codexConfig=validateConfig({locale,accounts:[
+      {id:'codex',provider:'Codex',label:'Private profile',sources:[{id:'plan',type:'subscription',adapter:'codex',authRef:'local:browser'}]},
+      {id:'demo',provider:'Demo provider',label:'Fictitious',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}
+    ]});
+    const metric={key:'remaining',name:'Codex',kind:'percent',scope:'account',value:0,window:{id:'abc_primary',label:'5h',durationMinutes:300,resetsAt:reset},sourceLabel:'Codex ChatGPT quota',observedAt:now,observationBasis:'response_received',receivedAt:now,freshness:'fresh'};
+    const codexState={id:'plan',type:'subscription',sourceLabel:'Codex ChatGPT quota',status:mode==='auth'?'auth':'ok',safeError:mode==='auth'?'auth':null,lastAttemptAt:now,lastSuccessAt:mode==='auth'?null:now,nextAttemptAt:mode==='auth'?null:reset,retryAfter:null,delayReason:mode==='auth'?'awaiting_retry':'regular',staleAfter:180000,busy:false,metrics:mode==='ok'?[metric]:[]};
+    const demoState={...codexState,sourceLabel:'Fictitious demo source',status:'loading',safeError:null,metrics:[]};
+    const mock={start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'codex',provider:'Codex',label:'Private profile',sources:[codexState]},{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[demoState]}]};}};
+    base=await start(codexConfig,adapters,mock);
+    await page.goto(base);await page.locator('tbody tr').first().waitFor();
+    assert.match(await page.locator('#subtitle').textContent(),locale==='ru'?/демонстрационные источники вымышлены/:/demo sources are fictitious/);
+    const row=page.locator('tbody tr').first();
+    if(mode==='ok') {assert.match(await row.textContent(),locale==='ru'?/5 ч/:/5h/);assert.match(await row.textContent(),/0%/);}
+    if(mode==='empty') {assert.match(await row.textContent(),locale==='ru'?/применимость неизвестна/:/applicability unknown/);assert.match(await row.textContent(),locale==='ru'?/Неизвестно/:/Unknown/);}
+    if(mode==='auth') {assert.match(await row.textContent(),locale==='ru'?/Нужна авторизация/:/Authorization needed/);await row.click();assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/отдельный профиль Codex/:/monitor’s Codex profile/);}
+    await stop();
+  }
   assert.deepEqual(errors,[]);
   console.log('Browser check passed; screenshots: /tmp/monitor-t2-en.png, /tmp/monitor-t2-narrow.png, /tmp/monitor-t2-ru.png, /tmp/monitor-t2-states.png, /tmp/monitor-t2-states-ru.png');
 } finally {await stop();if(browser)await browser.close();}
