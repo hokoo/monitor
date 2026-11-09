@@ -6,7 +6,7 @@ import {validateConfig} from '../core.mjs';
 import {readDemo} from '../demo.mjs';
 
 const fixture = locale => validateConfig({locale,accounts:[
-  {id:'one',provider:'Demo provider',label:'First fictitious account',sources:[{id:'plan',type:'subscription',adapter:'demo'},{id:'api',type:'api',adapter:'demo'}]},
+  {id:'one',provider:'Demo provider',label:'First fictitious account',color:'#557799',sources:[{id:'plan',type:'subscription',adapter:'demo'},{id:'api',type:'api',adapter:'demo'}]},
   {id:'two',provider:'Demo provider',label:'Second fictitious account',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}
 ]});
 const errors=[];
@@ -29,6 +29,8 @@ try {
   assert.match(await page.locator('tbody').textContent(),/5h/);
   assert.match(await page.locator('tbody').textContent(),/Weekly/);
   assert.equal(await page.locator('.bar').count(),4);
+  assert.equal(await page.locator('tbody tr').first().evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
+  assert.notEqual(await page.locator('tbody tr').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
   await page.locator('tbody tr').first().focus();await page.keyboard.press('Enter');
   assert.equal(await page.locator('tbody tr.active').count(),1);
   assert.match(await page.locator('#details-body').textContent(),/Next attempt/);

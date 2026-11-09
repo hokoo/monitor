@@ -16,6 +16,7 @@ export function validateConfig(config) {
   const zaiAuthRefs = new Set();
   const codexAuthRefs = new Set();
   for (const account of config.accounts) {
+    if (account.color != null && (typeof account.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(account.color))) throw Error('invalid config');
     if (!validId(account.id) || !validText(account.provider) || !validText(account.label) || !Array.isArray(account.sources) || account.sources.length === 0 || ids.has(account.id)) throw Error('invalid config');
     ids.add(account.id);
     const sourceIds = new Set();
@@ -150,7 +151,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
   }
   function snapshot() {
     const time = now();
-    return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, sources: account.sources.map(source => {
+    return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, color: account.color ?? null, sources: account.sources.map(source => {
       const state = states.get(key(account.id, source.id));
       const maxAge = source.staleAfterMs ?? staleMs;
       return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : source.adapter === 'codex' ? 'Codex ChatGPT quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, httpStatus: state.httpStatus ?? null, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
