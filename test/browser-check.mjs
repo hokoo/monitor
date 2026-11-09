@@ -30,6 +30,8 @@ try {
   assert.match(await page.locator('tbody').textContent(),/Weekly/);
   assert.equal(await page.locator('.bar').count(),4);
   assert.equal(await page.locator('tbody tr').first().evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
+  assert.equal(await page.locator('tbody tr').nth(1).evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
+  assert.equal(await page.locator('tbody tr').last().evaluate(el=>el.style.getPropertyValue('--account-color')),'#a990cb');
   assert.notEqual(await page.locator('tbody tr').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
   await page.locator('tbody tr').first().focus();await page.keyboard.press('Enter');
   assert.equal(await page.locator('tbody tr.active').count(),1);

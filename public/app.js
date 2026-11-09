@@ -85,7 +85,8 @@ function render() {
   tbody.replaceChildren();
   for(const row of visible) {
     const {account,source,metric,key}=row, tr=tbody.insertRow();tr.tabIndex=0;tr.dataset.rowKey=key;tr.setAttribute('aria-label',`${t('row')}: ${account.label}, ${metricName(metric)}`);
-    const color=account.color ?? ({codex:'#68bfa6','z.ai':'#a990cb',claude:'#d2a27e'})[account.provider.toLowerCase()];if(color)tr.style.setProperty('--account-color',color);
+    const palette=['#68bfa6','#a990cb','#d2a27e','#77a9d1','#c28c9d','#a6b47b','#8bb7b6','#bda582'];
+    const color=account.color ?? palette[data.accounts.findIndex(a=>a.id===account.id)%palette.length];tr.style.setProperty('--account-color',color);
     tr.setAttribute('aria-selected',String(key===selected));if(key===selected)tr.className='active';
     tr.addEventListener('click',()=>select(key));tr.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();select(key);}});
     cell(tr,`${key===selected?'▸':' '} ${account.provider} / ${account.label}`,'account');
