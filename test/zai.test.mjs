@@ -117,3 +117,53 @@ test('Z.ai 429 honors Retry-After and invalid JSON uses safe common failure', as
   assert.equal(state.status, 'error');
   assert.equal(JSON.stringify(state).includes('secret'), false);
 });
+
+test('partial Z.ai reads retain prior values and observation times as stale per account', async () => {
+  const config = validateConfig({accounts: [
+    {id: 'one', provider: 'Z.ai', label: 'One', sources: [{...source, authRef: 'env:ZAI_ONE'}]},
+    {id: 'two', provider: 'Z.ai', label: 'Two', sources: [{...source, authRef: 'env:ZAI_TWO'}]}
+  ]});
+  const limits = [
+    [{type: 'TOKENS_LIMIT', percentage: 100}, {type: 'TIME_LIMIT', percentage: 20}],
+    [{type: 'TIME_LIMIT', percentage: 30}],
+    [{type: 'TOKENS_LIMIT'}, {type: 'TIME_LIMIT'}],
+    [{type: 'TOKENS_LIMIT', percentage: null}],
+    [{type: 'TOKENS_LIMIT', percentage: 50}, {type: 'TIME_LIMIT', percentage: 0}]
+  ];
+  let phase = 0, time = Date.parse('2026-01-01T00:00:00.000Z');
+  const fetcher = async (url, options) => response(options.headers.Authorization === 'one-secret' ? limits[phase] : [{type: 'TOKENS_LIMIT', percentage: 90 - phase}]);
+  const monitor = createMonitor(config, {zai: (account, configuredSource, context) => readZai(account, configuredSource, context, {fetcher, env: {ZAI_ONE: 'one-secret', ZAI_TWO: 'two-secret'}})}, {now: () => time});
+  const read = async () => {monitor.tick(); await flush(); return monitor.snapshot().accounts.map(account => account.sources[0]);};
+  let [one, two] = await read();
+  const first5hObserved = one.metrics[0].observedAt;
+  assert.equal(one.metrics[0].value, 0);
+  assert.equal(one.metrics[1].value, 80);
+  assert.equal(two.metrics[0].value, 10);
+  phase = 1; time += 10000; [one, two] = await read();
+  assert.equal(one.metrics[0].value, 0);
+  assert.equal(one.metrics[0].observedAt, first5hObserved);
+  assert.equal(one.metrics[0].freshness, 'stale');
+  assert.equal(one.metrics[1].value, 70);
+  assert.equal(one.metrics[1].freshness, 'fresh');
+  assert.equal(two.metrics[0].value, 11);
+  const monthlyObserved = one.metrics[1].observedAt;
+  phase = 2; time += 10000; [one, two] = await read();
+  assert.equal(one.metrics[0].value, 0);
+  assert.equal(one.metrics[0].observedAt, first5hObserved);
+  assert.equal(one.metrics[1].value, 70);
+  assert.equal(one.metrics[1].observedAt, monthlyObserved);
+  assert.equal(one.metrics[1].freshness, 'stale');
+  assert.equal(two.metrics[0].freshness, 'fresh');
+  phase = 3; time += 10000; [one] = await read();
+  assert.equal(one.metrics[0].value, 0);
+  assert.equal(one.metrics[0].observedAt, first5hObserved);
+  assert.equal(one.metrics[0].freshness, 'stale');
+  assert.equal(one.metrics[1].value, 70);
+  assert.equal(one.metrics[1].observedAt, monthlyObserved);
+  phase = 4; time += 10000; [one, two] = await read();
+  assert.deepEqual(one.metrics.slice(0, 2).map(metric => [metric.value, metric.freshness]), [[50, 'fresh'], [100, 'fresh']]);
+  assert.equal(two.metrics[0].value, 14);
+  const partial = createMonitor(validateConfig({accounts: [config.accounts[0]]}), {zai: (account, configuredSource, context) => readZai(account, configuredSource, context, {fetcher: async () => response([{type: 'TOKENS_LIMIT'}]), env: {ZAI_ONE: 'one-secret'}})}, {now: () => time});
+  partial.tick(); await flush();
+  assert.deepEqual(partial.snapshot().accounts[0].sources[0].metrics.map(metric => [metric.value, metric.freshness]), [[null, 'unknown'], [null, 'unknown'], [null, 'unknown']]);
+});

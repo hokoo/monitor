@@ -100,7 +100,8 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
       for (const metric of normalized) {
         const id = metricKey(metric);
         const previous = state.metrics.get(id);
-        if (result.passive && previous && (metric.snapshotAt && previous.snapshotAt === metric.snapshotAt || !metric.snapshotAt && metric.observedAt && previous.observedAt === metric.observedAt)) state.metrics.set(id, {...previous, missing: false});
+        if (source.adapter === 'zai' && metric.value == null && previous?.value != null) state.metrics.set(id, {...previous, missing: true});
+        else if (result.passive && previous && (metric.snapshotAt && previous.snapshotAt === metric.snapshotAt || !metric.snapshotAt && metric.observedAt && previous.observedAt === metric.observedAt)) state.metrics.set(id, {...previous, missing: false});
         else state.metrics.set(id, {...metric, missing: false});
       }
       state.status = 'ok'; state.safeError = null; state.lastSuccessAt = receivedAt; state.failures = 0; state.retryAfter = null;
