@@ -1,6 +1,6 @@
 # План разработки монитора ресурсов
 
-Статус: выполнение T1–T6 авторизовано пользователем 2026-11-09; T1 принят, T2 готов к выполнению.
+Статус: выполнение T1–T6 авторизовано пользователем 2026-11-09; T1 принят, T2 реализован и проверен локально.
 
 Источник требований — [SPEC.md](SPEC.md). Решения DG1–DG5 и доступные аккаунты фиксируются в разделе 11 спецификации; этот план определяет задачи, зависимости и порядок выполнения. Авторизация от 2026-11-09: выполнять готовые задачи последовательно, продолжать независимую работу при блокерах; проверка и локальные коммиты включены, push/merge/публикация исключены.
 
@@ -67,7 +67,7 @@ Notes/Risks: 2 GPT, 1 GLM, 1 бесплатный Claude не доказываю
 
 ## T2. Сделать общий экран и цикл обновления
 
-Status: todo
+Status: completed
 
 Goal: отображать ресурсы нескольких аккаунтов в одном локальном цветном TUI веб-интерфейсе.
 
@@ -88,6 +88,15 @@ AC:
 Dependencies: T1; SPEC.md, разделы 4–6, 8–10.
 
 Notes/Risks: моковые источники подтверждают общую логику, но не работоспособность интеграций. Смена языка требует перезапуска и подчиняется общему сбросу кэша.
+
+### Checkpoint T2 — 2026-11-09
+
+- Реализованы `core.mjs`, `demo.mjs`, `server.mjs`, `public/{index.html,app.js,style.css}`, `config.example.json`, `.gitignore`, краткий запуск в `README.md` и `test/{core.test.mjs,server.test.mjs,browser-check.mjs}`. Node 24 stdlib, без зависимостей приложения; только явно вымышленные demo-данные. Предшествующие дополнения root в этом плане сохранены.
+- AC1: ключи account/source/metric/window изолированы, subscription/API и применимые окна раздельны. AC2: ноль/неизвестное/устаревшее/ошибка различимы; частичный ответ и пассивный снимок не омолаживают прежние данные, reset не создаёт остаток, неизвестный kind безопасно `unsupported`. AC3: серверный кэш, 10s, ограниченная конкуренция, отсутствие очереди/перекрытий, timeout, 401/403 suspension, backoff и полный Retry-After. AC4: TUI, клавиатура, сохранение фильтра/выбора/фокуса, подробности, узкий экран и серверные EN/RU проверены в Chromium/Linux; browser locale не управляет языком.
+- Проверки: `node --test test/core.test.mjs test/server.test.mjs` — exit 0, **11/11**, 0 skipped, `/tmp/monitor-t2-node-tests-r2.log`; `node test/browser-check.mjs` — exit 0, **0 console/page errors**, `/tmp/monitor-t2-browser-r3.log`. Синтаксис JS, JSON примера и `git diff --check` — exit 0. Owner просмотрел фактические файлы/diff и `/tmp/monitor-t2-{en,ru,narrow,states,states-ru}.png`: читаемые текст/статусы, фокус и активная строка. Host/Origin, отсутствие authRef/секретов в JSON и безопасный текст подтверждены проверками.
+- Неудачные попытки сохранены: первоначальный HTTP запуск — sandbox `listen EPERM` до assertions; первый разрешённый suite — 9 pass/1 fail (`/tmp/monitor-t2-node-tests.log`), Node fetch переписывал тестовый Host, исправлен транспорт теста на `node:http` без ослабления сервера. Browser r2 — exit 1, `ERR_CONNECTION_REFUSED` от опроса при остановке fixture-сервера (`/tmp/monitor-t2-browser-r2.log`); исправлен только teardown страницы, строгая проверка ошибок сохранена. После этого Node suite не повторялся: изменился лишь browser harness.
+- Граница: проверенный локальный diff поверх `06e6fcf`, manifest `/tmp/monitor-t2-boundary-r3.sha256` (12/12 совпали после проверки и у owner). Техническая приёмка owner — pass; доставка — локальный коммит с этим checkpoint. Push/merge/публикации нет. Реальные интеграции, аккаунты и полная приёмка T3–T6 остаются отдельной работой; demo-проверки их не заменяют.
+- Owner `/root/t2_owner` — `01a1c005-e4f8-7d10-ad86-d9cb53b8aac5`; worker `/root/t2_owner/implementation` — `01a1c006-cd11-7232-9c55-face0ea39f7f`; monitors `verification` — `01a1c012-3fb7-7381-8d3a-7061935f5f41`, `verification_r2` — `01a1c017-1320-7c40-9cf6-d2b88322242a`, `browser_r3` — `01a1c019-55ec-7231-a94b-8f8fc740f2d1`. Worker и все проверки завершены, серверы/Chromium закрыты; первые два monitor root уже archived exit 0. Следующий пакет и lifecycle оставшихся веток принадлежат root; owner T2 преемника не начинает.
 
 ## T3. Подключить Codex и OpenAI API
 
@@ -196,3 +205,9 @@ Notes/Risks: имеющегося набора аккаунтов пока не�
 
 - Root начал исполнение с чистого дерева на `3cd245d`. Исторический checkpoint планирования выше описывает прежнюю границу; новая авторизация распространяется на готовые T1–T6.
 - T1 owner: `gpt-6.1-sol`, effort `high`: исследование нескольких контрактов и проверка источников при умеренной стоимости. Worker использует роль `worker` с pin `gpt-6-sol/high`. Предел: один owner и один writer; глубина root → owner → specialist.
+
+- Root принял T1 на `06e6fcf`, проверил фактический diff/матрицу и чистое дерево. Обе ветки T1 confirmed completed; archive через serving daemon завершился exit 0 для worker `01a1bffe-7229-71d2-abb4-a3913b351270` и owner `01a1bffd-9da6-74e1-876a-873ed7c525f8`. Первая попытка archive отклонена auto-review до повторной проверки completed, команды тогда не запускались.
+- T2 owner: `gpt-6.1-sol/high`, причина: согласование scheduler, безопасного localhost API и браузерной проверки. Worker `gpt-6-sol/high`, test_monitor `gpt-6-luna/low`; последовательные проверки на остановленном writer.
+
+- Дополнение root 2026-11-09: пользователь подтвердил только подписки, без отдельных API-кредитов; ChatGPT описаны ценами 100 и 20, GLM 19 (валюта/период/точные названия тарифов не подтверждены). API-покрытие не отменено, ожидает подключений; независимые срезы подписок можно уточнять и выполнять отдельно, сохраняя общие задачи незавершёнными.
+- DG4: пользователь разрешил исследование недокументированных read-only интерфейсов. Explorer `/root/source_research` (`01a1c008-f0d7-77e2-b879-8f7813388ae9`) завершён, принят root и archived exit 0. Найден [официальный скрипт Z.ai](https://github.com/zai-org/zai-coding-plugins/blob/main/plugins/glm-plan-usage/skills/usage-query-skill/scripts/query-usage.mjs): GET `/api/monitor/usage/quota/limit`, raw Authorization из настроенного токена; `TOKENS_LIMIT.percentage` 5h, `TIME_LIMIT` monthly MCP. Root открыл исходник и подтвердил. Это уточняет candidate T1, но не подтверждает weekly/reset/freshness/cadence или живой доступ. Пользователь подтвердил реализацию GLM этим способом; риск изменений недокументированного API принят, живые проверки и полнота полей не считаются выполненными. Для Claude Free пригодный автоматический источник не подтверждён; blanket запрет read-only мониторинга из общих OAuth правил не выводится.

@@ -1,0 +1,12 @@
+{
+  "locale": "en",
+  "accounts": [
+    {"id": "demo-one", "provider": "Demo provider", "label": "Fictitious account 1", "sources": [
+      {"id": "plan", "type": "subscription", "adapter": "demo"},
+      {"id": "project", "type": "api", "adapter": "demo"}
+    ]},
+    {"id": "demo-two", "provider": "Demo provider", "label": "Fictitious account 2", "sources": [
+      {"id": "plan", "type": "subscription", "adapter": "demo"}
+    ]}
+  ]
+}

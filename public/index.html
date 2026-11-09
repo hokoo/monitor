@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resource monitor</title>
+<link rel="stylesheet" href="/style.css">
+<script defer src="/app.js"></script>
+</head>
+<body>
+<main class="shell">
+<header><div><p id="eyebrow" class="eyebrow"></p><h1 id="title"></h1><p id="subtitle" class="muted"></p></div><span id="summary" role="status"></span></header>
+<div class="toolbar"><label for="filter" id="filter-label"></label><input id="filter" type="search" autocomplete="off"><button id="refresh" type="button"></button><span id="hint" class="muted"></span></div>
+<div id="empty" class="empty" hidden></div>
+<div class="table-scroll" tabindex="0" id="table-scroll"><table><thead><tr id="headers"></tr></thead><tbody id="rows"></tbody></table></div>
+<section class="details" tabindex="0" aria-labelledby="details-title"><h2 id="details-title"></h2><div id="details-body"></div></section>
+</main>
+</body>
+</html>
