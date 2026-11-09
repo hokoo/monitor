@@ -137,6 +137,17 @@ try {
     }
     await firstRow.click();
     assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
+    if (status === 'ok') {
+      const weekly = zaiMetrics[2];
+      Object.assign(weekly, {name:'Weekly quota',value:76,freshness:'fresh'});
+      Object.assign(weekly.window, {durationMinutes:10080,resetsAt:reset});
+      await page.reload(); await page.locator('tbody tr').nth(2).waitFor();
+      assert.match(await page.locator('tbody tr').nth(2).textContent(),locale==='ru'?/Недельный лимит/:/Weekly quota/);
+      assert.match(await page.locator('tbody tr').nth(2).textContent(),/76%/);
+      Object.assign(zaiState, {status:'error',safeError:'network',httpStatus:502});
+      await page.reload(); await page.locator('tbody tr').first().click();
+      assert.match(await page.locator('#details-body').textContent(),/HTTP 502/);
+    }
     await stop();
   }
   for (const locale of ['en','ru']) for (const mode of ['ok','empty','auth']) {

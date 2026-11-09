@@ -38,6 +38,47 @@ test('malformed schema and known percentage values fail atomically', () => {
   }
 });
 
+test('current CREDIT_LIMIT schema separates 5h and weekly and reads reset milliseconds', () => {
+  const reset = Date.parse('2026-11-10T12:00:00.000Z');
+  const entries = [
+    {type: 'CREDIT_LIMIT', unit: 6, number: 1, percentage: 24, nextResetTime: reset},
+    {type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 22, nextResetTime: reset - 3600000}
+  ];
+  const result = parseZaiQuota({code: 200, success: true, ...body(entries)});
+  assert.deepEqual(result.metrics.map(m => [m.window.id, m.value]), [['5h', 78], ['monthly_mcp', null], ['weekly', 76]]);
+  assert.equal(result.metrics[2].window.durationMinutes, 10080);
+  assert.equal(result.metrics[2].window.resetsAt, new Date(reset).toISOString());
+  assert.equal(result.metrics[2].name, 'Weekly quota');
+  for (const patch of [{percentage: 101}, {unit: 99}, {number: 2}, {nextResetTime: 'tomorrow'}, {nextResetTime: -1}]) {
+    assert.throws(() => parseZaiQuota(body([{...entries[0], ...patch}])), e => e.code === 'invalid_data');
+  }
+  assert.throws(() => parseZaiQuota(body([entries[0], entries[0]])), e => e.code === 'invalid_data');
+  assert.throws(() => parseZaiQuota({success: false, ...body(entries)}), e => e.code === 'invalid_data');
+  assert.throws(() => parseZaiQuota({code: 500, ...body(entries)}), e => e.code === 'invalid_data');
+});
+
+test('HTTP failure exposes only status and preserves last CREDIT_LIMIT observation', async () => {
+  const config = validateConfig({accounts: [{id: 'one', provider: 'Z.ai', label: 'One', sources: [source]}]});
+  let time = Date.parse('2026-01-01T00:00:00.000Z'), phase = 0;
+  const fetcher = async () => phase === 1 ? new Response('secret-token upstream detail', {status: 502}) : response(phase === 2 ? [] : [{type: 'CREDIT_LIMIT', unit: 3, number: 5, percentage: 22}]);
+  const monitor = createMonitor(config, {zai: (a, s, c) => readZai(a, s, c, {fetcher, env: {ZAI_TEST_TOKEN: 'secret-token'}})}, {now: () => time});
+  monitor.tick(); await flush();
+  const observedAt = monitor.snapshot().accounts[0].sources[0].metrics[0].observedAt;
+  phase = 1; time += 10000; monitor.tick(); await flush();
+  let state = monitor.snapshot().accounts[0].sources[0];
+  assert.equal(state.httpStatus, 502);
+  assert.equal(state.metrics[0].value, 78);
+  assert.equal(state.metrics[0].freshness, 'stale');
+  assert.equal(JSON.stringify(state).includes('secret-token'), false);
+  phase = 2; time += 20000; monitor.tick(); await flush();
+  state = monitor.snapshot().accounts[0].sources[0];
+  assert.equal(state.httpStatus, null);
+  assert.equal(state.metrics[0].value, 78);
+  assert.equal(state.metrics[0].observedAt, observedAt);
+  assert.equal(state.metrics[0].freshness, 'stale');
+  await monitor.stop();
+});
+
 test('fixed GET sends raw token, rejects redirect, forwards signal, and sanitizes failures', async () => {
   const controller = new AbortController();
   const seen = [];

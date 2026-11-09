@@ -70,7 +70,7 @@ export function safeFailure(error, now = Date.now()) {
   }
   if (error?.name === 'AbortError' || error?.code === 'timeout') return {code: 'timeout', retryAfter: null};
   if (error?.code === 'invalid_data') return {code: 'invalid_data', retryAfter: null};
-  return {code: 'network', retryAfter: null};
+  return {code: 'network', retryAfter: null, httpStatus: Number.isInteger(status) && status >= 400 && status <= 599 ? status : null};
 }
 
 export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_000, concurrency = 4, pollMs = POLL_MS, staleMs = STALE_MS} = {}) {
@@ -113,13 +113,14 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
         else if (result.passive && previous && (metric.snapshotAt && previous.snapshotAt === metric.snapshotAt || !metric.snapshotAt && metric.observedAt && previous.observedAt === metric.observedAt)) state.metrics.set(id, {...previous, missing: false});
         else state.metrics.set(id, {...metric, missing: false});
       }
-      state.status = 'ok'; state.safeError = null; state.lastSuccessAt = receivedAt; state.failures = 0; state.retryAfter = null;
+      state.status = 'ok'; state.safeError = null; state.httpStatus = null; state.lastSuccessAt = receivedAt; state.failures = 0; state.retryAfter = null;
       const interval = Math.max(pollMs, source.minIntervalMs ?? 0);
       state.nextAttemptAt = iso(now() - started >= interval ? now() + interval : started + interval);
       state.delayReason = source.minIntervalMs > pollMs ? 'source_interval' : 'regular';
     } catch (error) {
       const failure = safeFailure(error, now());
       state.status = failure.code === 'auth' ? 'auth' : 'error'; state.safeError = failure.code;
+      state.httpStatus = failure.httpStatus ?? null;
       state.failures++;
       const delay = failure.code === 'auth' ? null : failure.retryAfter ?? Math.min(MAX_BACKOFF, pollMs * 2 ** Math.min(state.failures, 5));
       const due = delay == null || !Number.isFinite(delay) || delay > 8.64e15 - now() ? null : iso(now() + delay);
@@ -152,7 +153,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
     return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, sources: account.sources.map(source => {
       const state = states.get(key(account.id, source.id));
       const maxAge = source.staleAfterMs ?? staleMs;
-      return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : source.adapter === 'codex' ? 'Codex ChatGPT quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
+      return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : source.adapter === 'codex' ? 'Codex ChatGPT quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, httpStatus: state.httpStatus ?? null, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
     })}))};
   }
   return {tick, refresh, snapshot, start() {stopped = false; tick(); timer = setInterval(tick, 1000);}, async stop() {stopped = true; if (timer) clearInterval(timer); timer = null; for (const controller of controllers) controller.abort(); await Promise.allSettled([...attempts]);}};
