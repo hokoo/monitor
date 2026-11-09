@@ -1,0 +1,10 @@
+.git
+.env
+config.json
+.monitor-codex
+.idea
+PLAN.md
+SPEC.md
+README.md
+test
+*.log

@@ -1,0 +1,21 @@
+services:
+  monitor:
+    build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    env_file: .env
+    environment:
+      MONITOR_CONFIG: /app/config.json
+      MONITOR_HOST: 0.0.0.0
+      MONITOR_PORT: 8765
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./.monitor-codex:/app/.monitor-codex:rw
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/api/state').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
