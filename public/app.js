@@ -24,7 +24,7 @@ function until(date) {
   return new Intl.RelativeTimeFormat(locale(), {numeric:'auto',style:'short'}).format(amount,unit);
 }
 function flat() {
-  return data.accounts.flatMap(account => account.sources.flatMap(source => source.metrics.length ? source.metrics.map(metric => ({account,source,metric,key:JSON.stringify([account.id,source.id,metric.key,metric.window?.id ?? null])})) : [{account,source,metric:null,key:JSON.stringify([account.id,source.id,null,null])}]));
+  return data.accounts.flatMap(account => account.sources.flatMap(source => source.metrics.length ? source.metrics.map(metric => ({account,source,metric,key:JSON.stringify([account.id,source.id,metric.key,metric.window?.id ?? null])})) : [{account,source,metric:null,key:JSON.stringify([account.id,source.id,null,null])}])).filter(({source,metric}) => source.sourceLabel !== 'Z.ai Coding Plan quota' || metric?.window?.id !== 'monthly_mcp');
 }
 function filtered(rows) {
   const query = $('filter').value.trim().toLocaleLowerCase(locale());
