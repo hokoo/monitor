@@ -121,7 +121,10 @@ export async function readCodex(account, source, {signal}, {base, spawnFn = spaw
       child.stdin.write('{"method":"initialized"}\n');
       const identity = await request(2, 'account/read', {refreshToken: false});
       if (identity?.account?.type !== 'chatgpt') throw {status: 401};
-      return parseCodexLimits(await request(3, 'account/rateLimits/read', {excludeResetCreditDetails: true}));
+      const result = parseCodexLimits(await request(3, 'account/rateLimits/read', {excludeResetCreditDetails: true}));
+      const email = identity.account.email;
+      if (typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(email)) result.accountEmail = email;
+      return result;
     } finally {signal.removeEventListener('abort', onAbort);}
   } finally {
     if (child) {

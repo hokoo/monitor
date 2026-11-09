@@ -114,6 +114,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
         else if (result.passive && previous && (metric.snapshotAt && previous.snapshotAt === metric.snapshotAt || !metric.snapshotAt && metric.observedAt && previous.observedAt === metric.observedAt)) state.metrics.set(id, {...previous, missing: false});
         else state.metrics.set(id, {...metric, missing: false});
       }
+      if (source.adapter === 'codex' && typeof result.accountEmail === 'string' && /^[^\s@]+@[^\s@]+$/.test(result.accountEmail) && result.accountEmail.length <= 254) state.accountEmail = result.accountEmail;
       state.status = 'ok'; state.safeError = null; state.httpStatus = null; state.lastSuccessAt = receivedAt; state.failures = 0; state.retryAfter = null;
       const interval = Math.max(pollMs, source.minIntervalMs ?? 0);
       state.nextAttemptAt = iso(now() - started >= interval ? now() + interval : started + interval);
@@ -151,7 +152,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
   }
   function snapshot() {
     const time = now();
-    return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, color: account.color ?? null, sources: account.sources.map(source => {
+    return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.sources.map(source => states.get(key(account.id, source.id)).accountEmail).find(Boolean) ?? account.label, color: account.color ?? null, sources: account.sources.map(source => {
       const state = states.get(key(account.id, source.id));
       const maxAge = source.staleAfterMs ?? staleMs;
       return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : source.adapter === 'codex' ? 'Codex ChatGPT quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, httpStatus: state.httpStatus ?? null, pollIntervalMs: Math.max(pollMs, source.minIntervalMs ?? 0), lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};

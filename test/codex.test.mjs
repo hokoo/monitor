@@ -15,7 +15,7 @@ const payload = used => ({rateLimits: {primary: {usedPercent: used, windowDurati
   other: {primary: {usedPercent: 100, windowDurationMins: null, resetsAt: null}}
 }});
 
-function fakeChild({account = {type: 'chatgpt', email: 'secret@example.com'}, limits = payload(100), stall = false, crash = false, malformed = false, split = false, rpcError = false} = {}) {
+function fakeChild({account = {type: 'chatgpt', email: 'person@example.com'}, limits = payload(100), stall = false, crash = false, malformed = false, split = false, rpcError = false} = {}) {
   const child = new EventEmitter(); child.stdout = new PassThrough(); child.requests = []; child.closed = false;
   child.stdin = new Writable({write(chunk, encoding, done) {
     const message = JSON.parse(String(chunk)); child.requests.push(message);
@@ -89,7 +89,7 @@ test('stdio handshake, auth and secrets stay isolated', async () => {
   const base = await mkdtemp(path.join(tmpdir(), 'monitor-codex-test-'));
   const children = [];
   const calls = [];
-  const spawnFn = (cmd, argv, options) => {calls.push({cmd,argv,env:options.env});const child=fakeChild();children.push(child);return child;};
+  const spawnFn = (cmd, argv, options) => {calls.push({cmd,argv,env:options.env});const child=fakeChild({account:{type:'chatgpt',email:`${path.basename(options.env.CODEX_HOME)}@example.com`}});children.push(child);return child;};
   try {
     const config = validateConfig({accounts:[{id:'one',provider:'Codex',label:'First',sources:[source('one')]},{id:'two',provider:'Codex',label:'Second',sources:[source('two')]}]});
     const monitor = createMonitor(config, {codex:(account,s,context)=>readCodex(account,s,context,{base,spawnFn,env:{PATH:'/bin',HOME:'/home/person',OPENAI_API_KEY:'secret'}})});
@@ -98,6 +98,7 @@ test('stdio handshake, auth and secrets stay isolated', async () => {
     const state=monitor.snapshot();
     assert.deepEqual(state.accounts.map(a=>a.sources[0].status), ['ok','ok']);
     assert.equal(state.accounts[0].sources[0].metrics.length,3);
+    assert.deepEqual(state.accounts.map(a=>a.label),['one@example.com','two@example.com']);
     assert.equal(JSON.stringify(state).includes('secret'),false);
     assert.equal(JSON.stringify(state).includes(base),false);
     assert.equal(calls.length,2); assert.notEqual(calls[0].env.CODEX_HOME,calls[1].env.CODEX_HOME);
