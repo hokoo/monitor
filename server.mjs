@@ -16,7 +16,7 @@ export function allowedRequest(req, port) {
   const origin = req.headers.origin;
   return req.method === 'POST' ? origin === `http://${host}` : !origin || origin === `http://${host}`;
 }
-export function createServer(config, {port = 8765, adapters = {demo: readDemo, zai: readZai, codex: readCodex}, monitor = createMonitor(config, adapters)} = {}) {
+export function createServer(config, {port = 8765, host = '127.0.0.1', adapters = {demo: readDemo, zai: readZai, codex: readCodex}, monitor = createMonitor(config, adapters)} = {}) {
   let boundPort = port;
   const server = http.createServer(async (req, res) => {
     const headers = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin', 'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"};
@@ -36,7 +36,7 @@ export function createServer(config, {port = 8765, adapters = {demo: readDemo, z
     }
     return send(404, 'Not found');
   });
-  return {server, monitor, listen() {return new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', () => {boundPort = server.address().port; monitor.start(); resolve(server.address());}));}, async close() {await monitor.stop(); return new Promise(resolve => server.close(resolve));}};
+  return {server, monitor, listen() {return new Promise((resolve, reject) => server.once('error', reject).listen(port, host, () => {boundPort = server.address().port; monitor.start(); resolve(server.address());}));}, async close() {await monitor.stop(); return new Promise(resolve => server.close(resolve));}};
 }
 export async function loadConfig(file = process.env.MONITOR_CONFIG || path.join(root, 'config.json')) {
   try {return validateConfig(JSON.parse(await readFile(file, 'utf8')));}
@@ -47,9 +47,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const config = await loadConfig();
     const port = Number(process.env.MONITOR_PORT ?? 8765);
     if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('Invalid port');
-    const app = createServer(config, {port});
+    const host = process.env.MONITOR_HOST ?? '127.0.0.1';
+    if (!['127.0.0.1', '0.0.0.0'].includes(host)) throw Error('Invalid host');
+    const app = createServer(config, {port, host});
     await app.listen();
-    console.log(`Monitor listening on http://127.0.0.1:${port}`);
+    console.log(`Monitor listening on http://${host}:${port}`);
     const stop = () => {void app.close().then(() => {process.exitCode = 0;});};
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
   } catch {console.error('Monitor could not start: check configuration and port'); process.exitCode = 1;}

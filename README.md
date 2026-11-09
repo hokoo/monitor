@@ -22,7 +22,7 @@ The Z.ai reader sends a read-only GET to the fixed `https://api.z.ai/api/monitor
 
 Missing tokens and HTTP 401/403 pause the affected source until manual Refresh. HTTP 429 respects Retry-After; network, timeout, and invalid responses use the common safe error states. Other accounts continue independently. The current credit schema and token eligibility have been checked with one live Z.ai account. A comparison with the provider UI and live isolation of two Z.ai accounts remain unverified. Non-auth HTTP failures show the safe HTTP status in details; upstream bodies and keys are never displayed.
 
-Optional server environment variables: `MONITOR_CONFIG` points to a config JSON file; `MONITOR_PORT` sets a loopback port (default 8765). No URL or command-line argument accepts secrets.
+Optional server environment variables: `MONITOR_CONFIG` points to a config JSON file; `MONITOR_PORT` sets the port (default 8765); `MONITOR_HOST` is `127.0.0.1` by default or `0.0.0.0` for the container. No URL or command-line argument accepts secrets.
 
 Run focused tests with `node --test test/core.test.mjs test/zai.test.mjs test/server.test.mjs`.
 On a Linux host with the preinstalled global Playwright package, run the browser check with `node test/browser-check.mjs`. It starts and stops its own loopback servers and writes screenshots to `/tmp/monitor-t2-*.png`.

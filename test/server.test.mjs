@@ -23,3 +23,15 @@ test('loopback API projects secrets away and rejects foreign Host and Origin', a
     assert.equal((await fetch(`${base}/api/state`)).headers.get('access-control-allow-origin'),null);
   } finally {await app.close();}
 });
+
+test('binds loopback by default and all interfaces when requested', async () => {
+  const config = validateConfig({accounts: []});
+  for (const [host, expected] of [[undefined, '127.0.0.1'], ['0.0.0.0', '0.0.0.0']]) {
+    const app = createServer(config, {port: 0, host});
+    try {
+      const address = await app.listen();
+      assert.equal(address.address, expected);
+      assert.equal((await fetch(`http://127.0.0.1:${address.port}/api/state`)).status, 200);
+    } finally {await app.close();}
+  }
+});
