@@ -16,6 +16,13 @@ function until(date) {
   if (minutes >= 60) return `${Math.floor(minutes / 60)}${ru ? 'ч' : 'h'} ${minutes % 60}${ru ? 'мин' : 'm'}`;
   return `${minutes}${ru ? 'мин' : 'm'}`;
 }
+function resetParts(date) {
+  if (!date) return ['', '', t('notAvailable')];
+  const minutes = Math.max(0, Math.ceil((Date.parse(date) - Date.now()) / 60000));
+  const ru = locale() === 'ru';
+  const days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60);
+  return [days ? `${days}${ru ? 'д' : 'd'}` : '', days || hours ? `${hours}${ru ? 'ч' : 'h'}` : '', `${minutes % 60}${ru ? 'мин' : 'm'}`];
+}
 function flat() {
   return data.accounts.flatMap(account => account.sources.flatMap(source => source.metrics.length ? source.metrics.map(metric => ({account,source,metric,key:JSON.stringify([account.id,source.id,metric.key,metric.window?.id ?? null])})) : [{account,source,metric:null,key:JSON.stringify([account.id,source.id,null,null])}])).filter(({source,metric}) => source.sourceLabel !== 'Z.ai Coding Plan quota' || metric?.window?.id !== 'monthly_mcp');
 }
@@ -94,7 +101,10 @@ function render() {
     cell(tr,`${t(source.type)} / ${metric ? metricName(metric) : source.sourceLabel === 'Z.ai Coding Plan quota' ? t('zaiSource') : source.sourceLabel === 'Codex ChatGPT quota' ? source.status === 'ok' ? t('codexUnknown') : t('codexSource') : t('demoSource')}${metric?.window ? ` / ${windowName(metric)}` : ''}`);
     const status=metricStatus(source,metric), valueCell=cell(tr,metricValue(metric),status);
     if(metric?.kind==='percent' && metric.value != null){const bar=document.createElement('span');bar.className='bar';bar.setAttribute('aria-hidden','true');const fill=document.createElement('span');fill.style.width=`${metric.value}%`;bar.append(fill);valueCell.prepend(bar);}
-    cell(tr,metric?.window?.resetsAt ? until(metric.window.resetsAt) : t('notAvailable'),'small');
+    const resetCell=cell(tr,'','small');
+    const resetGrid=document.createElement('div');resetGrid.className='reset-grid';
+    for(const part of resetParts(metric?.window?.resetsAt)){const span=document.createElement('span');span.textContent=part;resetGrid.append(span);}
+    resetCell.append(resetGrid);
     cell(tr,statusText(source,metric),`status ${status}`);
   }
   if(focused) [...tbody.rows].find(row=>row.dataset.rowKey===focused)?.focus();

@@ -26,6 +26,9 @@ try {
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
   assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Account|Resource|Remaining / value|Reset|State');
   assert.match(await page.locator('#subtitle').textContent(),/fictitious/);
+  assert.deepEqual(await page.evaluate(() => {const now=Date.now();return [resetParts(new Date(now+90000000).toISOString()),resetParts(new Date(now+18180000).toISOString()),resetParts(new Date(now+120000).toISOString()),resetParts(null)];}),[['1d','1h','0m'],['','5h','3m'],['','','2m'],['','','—']]);
+  assert.equal(await page.locator('tbody tr').first().locator('.reset-grid span').count(),3);
+  assert.equal(await page.locator('tbody tr').first().locator('.reset-grid').evaluate(el=>getComputedStyle(el).display),'grid');
   assert.deepEqual(await page.evaluate(() => {
     const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString()};
     const source={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};
