@@ -24,8 +24,18 @@ try {
   await page.goto(base);await page.locator('tbody tr').first().waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===5);
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
-  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Account|Resource|Remaining / value|Reset|Observed|State');
+  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Account|Resource|Remaining / value|Reset|State');
   assert.match(await page.locator('#subtitle').textContent(),/fictitious/);
+  assert.deepEqual(await page.evaluate(() => {
+    const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString()};
+    const source={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};
+    const before=metricStatus(source,metric);source.lastSuccessAt=new Date(now-21000).toISOString();
+    return [before,metricStatus(source,metric),until(new Date(now+90000000).toISOString()),until(new Date(now+7800000).toISOString())];
+  }),['fresh','stale','1 d 1 h','2 h 10 m']);
+  const widths=await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width));
+  await page.locator('#filter').fill('First fictitious');
+  assert.deepEqual(await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width)),widths);
+  await page.locator('#filter').fill('');
   assert.match(await page.locator('tbody').textContent(),/5h/);
   assert.match(await page.locator('tbody').textContent(),/Weekly/);
   assert.equal(await page.locator('.bar').count(),4);
@@ -82,7 +92,7 @@ try {
   base=await start(fixture('ru'),adapters);
   await page.goto(base);await page.locator('tbody tr').first().waitFor();
   assert.equal(await page.locator('html').getAttribute('lang'),'ru');
-  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Аккаунт|Ресурс|Остаток / значение|Сброс|Получено|Состояние');
+  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Аккаунт|Ресурс|Остаток / значение|Сброс|Состояние');
   assert.match(await page.locator('tbody').textContent(),/Неделя/);
   await page.locator('#filter').fill('Неделя');assert.equal(await page.locator('tbody tr').count(),2);
   await page.locator('#filter').press('Escape');
@@ -104,13 +114,13 @@ try {
   const statusMonitor=locale=>({start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'states',provider:'Demo provider',label:'Fictitious status examples',sources:statusIds.map(statusSource)}]};}});
   base=await start(statusConfig('en'),adapters,statusMonitor('en'));
   await page.goto(base);await page.locator('tbody tr').last().waitFor();
-  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['Current','Unknown','Stale','Error · Stale','Authorization needed · Stale']);
-  assert.equal(await page.locator('tbody tr').nth(3).locator('td').nth(2).getAttribute('class'),'stale');
+  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['OK','Unknown','OK','OK','Authorization needed']);
+  assert.equal(await page.locator('tbody tr').nth(3).locator('td').nth(2).getAttribute('class'),'fresh');
   await page.screenshot({path:'/tmp/monitor-t2-states.png',fullPage:true});
   await stop();
   base=await start(statusConfig('ru'),adapters,statusMonitor('ru'));
   await page.goto(base);await page.locator('tbody tr').last().waitFor();
-  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['Актуально','Неизвестно','Устарело','Ошибка · Устарело','Нужна авторизация · Устарело']);
+  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['OK','Неизвестно','OK','OK','Нужна авторизация']);
   await page.locator('tbody tr').nth(3).click();
   assert.match(await page.locator('#details-body').textContent(),/Ожидание по Retry-After провайдера/);
   await page.screenshot({path:'/tmp/monitor-t2-states-ru.png',fullPage:true});
