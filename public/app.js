@@ -12,9 +12,9 @@ function until(date) {
   if (!date) return t('notAvailable');
   const minutes = Math.max(0, Math.ceil((Date.parse(date) - Date.now()) / 60000));
   const ru = locale() === 'ru';
-  if (minutes >= 1440) return `${Math.floor(minutes / 1440)} ${ru ? 'д' : 'd'} ${Math.floor(minutes % 1440 / 60)} ${ru ? 'ч' : 'h'}`;
-  if (minutes >= 60) return `${Math.floor(minutes / 60)} ${ru ? 'ч' : 'h'} ${minutes % 60} ${ru ? 'мин' : 'm'}`;
-  return `${minutes} ${ru ? 'мин' : 'm'}`;
+  if (minutes >= 1440) return `${Math.floor(minutes / 1440)}${ru ? 'д' : 'd'} ${Math.floor(minutes % 1440 / 60)}${ru ? 'ч' : 'h'}`;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}${ru ? 'ч' : 'h'} ${minutes % 60}${ru ? 'мин' : 'm'}`;
+  return `${minutes}${ru ? 'мин' : 'm'}`;
 }
 function flat() {
   return data.accounts.flatMap(account => account.sources.flatMap(source => source.metrics.length ? source.metrics.map(metric => ({account,source,metric,key:JSON.stringify([account.id,source.id,metric.key,metric.window?.id ?? null])})) : [{account,source,metric:null,key:JSON.stringify([account.id,source.id,null,null])}])).filter(({source,metric}) => source.sourceLabel !== 'Z.ai Coding Plan quota' || metric?.window?.id !== 'monthly_mcp');

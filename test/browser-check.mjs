@@ -31,7 +31,7 @@ try {
     const source={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};
     const before=metricStatus(source,metric);source.lastSuccessAt=new Date(now-21000).toISOString();
     return [before,metricStatus(source,metric),until(new Date(now+90000000).toISOString()),until(new Date(now+7800000).toISOString())];
-  }),['fresh','stale','1 d 1 h','2 h 10 m']);
+  }),['fresh','stale','1d 1h','2h 10m']);
   const widths=await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width));
   await page.locator('#filter').fill('First fictitious');
   assert.deepEqual(await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width)),widths);
