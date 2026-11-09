@@ -1,0 +1,11 @@
+{
+  "locale": "en",
+  "accounts": [
+    {"id": "glm-one", "provider": "Z.ai", "label": "GLM Coding Plan 1", "sources": [
+      {"id": "plan", "type": "subscription", "adapter": "zai", "authRef": "env:ZAI_PLAN_ONE_TOKEN"}
+    ]},
+    {"id": "glm-two", "provider": "Z.ai", "label": "GLM Coding Plan 2", "sources": [
+      {"id": "plan", "type": "subscription", "adapter": "zai", "authRef": "env:ZAI_PLAN_TWO_TOKEN"}
+    ]}
+  ]
+}

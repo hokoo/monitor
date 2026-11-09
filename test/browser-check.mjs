@@ -110,6 +110,35 @@ try {
   await page.locator('tbody tr').nth(3).click();
   assert.match(await page.locator('#details-body').textContent(),/Ожидание по Retry-After провайдера/);
   await page.screenshot({path:'/tmp/monitor-t2-states-ru.png',fullPage:true});
+  await stop();
+  for (const locale of ['en','ru']) for (const [status,mixed] of [['loading',true],['auth',false],['ok',true]]) {
+    const zaiConfig=validateConfig({locale,accounts:[
+      {id:'glm',provider:'Z.ai',label:'GLM account',sources:[{id:'plan',type:'subscription',adapter:'zai',authRef:'env:ZAI_BROWSER_MOCK'}]},
+      ...(mixed?[{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}]:[])
+    ]});
+    const zaiMetrics=status==='ok'?[...['5h','monthly_mcp','weekly'].map((id,index)=>({key:'remaining',name:index===0?'5h quota':index===1?'Monthly MCP quota':'Weekly (not reported; applicability unknown)',kind:'percent',scope:'account',value:index===0?0:index===1?70:null,window:{id,label:id,durationMinutes:index===0?300:null,resetsAt:null},sourceLabel:'Z.ai Coding Plan quota',observedAt:now,observationBasis:'response_received',receivedAt:now,periodStart:null,periodEnd:null,dataRefreshedAt:null,freshness:index===2?'unknown':'fresh'}))]:[];
+    const zaiState={id:'plan',type:'subscription',sourceLabel:'Z.ai Coding Plan quota',status,safeError:status==='auth'?'auth':null,lastAttemptAt:now,lastSuccessAt:status==='ok'?now:null,nextAttemptAt:status==='auth'?null:reset,retryAfter:null,delayReason:status==='auth'?'awaiting_retry':'initial',staleAfter:180000,busy:status==='loading',metrics:zaiMetrics};
+    const demoState={...zaiState,sourceLabel:'Fictitious demo source',status:'loading',safeError:null,metrics:[]};
+    const mock={start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'glm',provider:'Z.ai',label:'GLM account',sources:[zaiState]},...(mixed?[{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[demoState]}]:[])]};}};
+    base=await start(zaiConfig,adapters,mock);
+    await page.goto(base);await page.locator('tbody tr').first().waitFor();
+    const subtitle=await page.locator('#subtitle').textContent();
+    assert.match(subtitle,locale==='ru'?/Настроен GLM Coding Plan/:/Z.ai Coding Plan configured/);
+    assert.equal(subtitle.includes(locale==='ru'?'вымышлены':'fictitious'),mixed);
+    const firstRow=page.locator('tbody tr').first();
+    assert.match(await firstRow.textContent(),locale==='ru'?/Подписка/:/Subscription/);
+    if(status==='loading'||status==='auth') {
+      assert.match(await firstRow.textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
+      assert.match(await firstRow.textContent(),status==='auth'?(locale==='ru'?/Нужна авторизация/:/Authorization needed/):(locale==='ru'?/Загрузка/:/Loading/));
+    } else {
+      assert.match(await firstRow.textContent(),locale==='ru'?/Лимит 5 ч/:/5h quota/);
+      assert.match(await firstRow.textContent(),/0%/);
+      assert.match(await page.locator('tbody').textContent(),locale==='ru'?/применимость неизвестна/:/applicability unknown/);
+    }
+    await firstRow.click();
+    assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
+    await stop();
+  }
   assert.deepEqual(errors,[]);
   console.log('Browser check passed; screenshots: /tmp/monitor-t2-en.png, /tmp/monitor-t2-narrow.png, /tmp/monitor-t2-ru.png, /tmp/monitor-t2-states.png, /tmp/monitor-t2-states-ru.png');
 } finally {await stop();if(browser)await browser.close();}

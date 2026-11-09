@@ -13,12 +13,17 @@ const finite = value => typeof value === 'number' && Number.isFinite(value);
 export function validateConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config) || !['en', 'ru'].includes(config.locale ?? 'en') || !Array.isArray(config.accounts)) throw Error('invalid config');
   const ids = new Set();
+  const zaiAuthRefs = new Set();
   for (const account of config.accounts) {
     if (!validId(account.id) || !validText(account.provider) || !validText(account.label) || !Array.isArray(account.sources) || account.sources.length === 0 || ids.has(account.id)) throw Error('invalid config');
     ids.add(account.id);
     const sourceIds = new Set();
     for (const source of account.sources) {
-      if (!validId(source.id) || !['subscription', 'api'].includes(source.type) || source.adapter !== 'demo' || sourceIds.has(source.id) || (source.minIntervalMs != null && (!Number.isInteger(source.minIntervalMs) || source.minIntervalMs < POLL_MS || source.minIntervalMs > 86400000)) || (source.staleAfterMs != null && (!Number.isInteger(source.staleAfterMs) || source.staleAfterMs < SECOND || source.staleAfterMs > 86400000)) || (source.authRef != null && (typeof source.authRef !== 'string' || !/^(env:[A-Z_][A-Z0-9_]*|local:[a-zA-Z0-9_-]+)$/.test(source.authRef)))) throw Error('invalid config');
+      if (!validId(source.id) || !['subscription', 'api'].includes(source.type) || !['demo', 'zai'].includes(source.adapter) || source.adapter === 'zai' && (source.type !== 'subscription' || typeof source.authRef !== 'string' || !/^env:[A-Z_][A-Z0-9_]*$/.test(source.authRef)) || sourceIds.has(source.id) || (source.minIntervalMs != null && (!Number.isInteger(source.minIntervalMs) || source.minIntervalMs < POLL_MS || source.minIntervalMs > 86400000)) || (source.staleAfterMs != null && (!Number.isInteger(source.staleAfterMs) || source.staleAfterMs < SECOND || source.staleAfterMs > 86400000)) || (source.authRef != null && (typeof source.authRef !== 'string' || !/^(env:[A-Z_][A-Z0-9_]*|local:[a-zA-Z0-9_-]+)$/.test(source.authRef)))) throw Error('invalid config');
+      if (source.adapter === 'zai') {
+        if (zaiAuthRefs.has(source.authRef)) throw Error('invalid config');
+        zaiAuthRefs.add(source.authRef);
+      }
       sourceIds.add(source.id);
     }
   }
@@ -131,7 +136,7 @@ export function createMonitor(config, adapters, {now = Date.now, timeoutMs = 10_
     return {locale: config.locale, now: iso(time), accounts: config.accounts.map(account => ({id: account.id, provider: account.provider, label: account.label, sources: account.sources.map(source => {
       const state = states.get(key(account.id, source.id));
       const maxAge = source.staleAfterMs ?? staleMs;
-      return {id: source.id, type: source.type, sourceLabel: 'Fictitious demo source', status: state.status, safeError: state.safeError, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
+      return {id: source.id, type: source.type, sourceLabel: source.adapter === 'zai' ? 'Z.ai Coding Plan quota' : 'Fictitious demo source', status: state.status, safeError: state.safeError, lastAttemptAt: state.lastAttemptAt, lastSuccessAt: state.lastSuccessAt, nextAttemptAt: state.nextAttemptAt, retryAfter: state.retryAfter, delayReason: state.delayReason, staleAfter: maxAge, busy: state.busy, metrics: [...state.metrics.values()].map(metric => ({...metric, freshness: metric.value == null || !metric.observedAt ? 'unknown' : metric.missing || state.status !== 'ok' || time - Date.parse(metric.observedAt) > maxAge || (metric.window?.resetsAt && time >= Date.parse(metric.window.resetsAt)) ? 'stale' : 'fresh'}))};
     })}))};
   }
   return {tick, refresh, snapshot, start() {tick(); timer = setInterval(tick, 1000);}, stop() {if (timer) clearInterval(timer); timer = null;}};
