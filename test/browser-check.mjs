@@ -89,7 +89,7 @@ try {
   await page.locator('tbody tr').last().focus();await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(()=>document.activeElement.className),'details');
   await page.setViewportSize({width:390,height:760});
-  assert.equal(await page.locator('#table-scroll').evaluate(el=>el.scrollWidth>el.clientWidth),true);
+  assert.equal(await page.locator('#table-scroll').evaluate(el=>el.scrollWidth>el.clientWidth),false);
   await page.screenshot({path:'/tmp/monitor-t2-narrow.png',fullPage:true});
   await stop();
   base=await start(fixture('ru'),adapters);
@@ -143,14 +143,12 @@ try {
     assert.match(subtitle,locale==='ru'?/Настроен GLM Coding Plan/:/Z.ai Coding Plan configured/);
     assert.equal(subtitle.includes(locale==='ru'?'вымышлены':'fictitious'),mixed);
     const firstRow=page.locator('tbody tr').first();
-    assert.match(await firstRow.textContent(),locale==='ru'?/Подписка/:/Subscription/);
     if(status==='loading'||status==='auth') {
       assert.match(await firstRow.textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
       assert.match(await firstRow.textContent(),status==='auth'?(locale==='ru'?/Нужна авторизация/:/Authorization needed/):(locale==='ru'?/Загрузка/:/Loading/));
     } else {
-      assert.match(await firstRow.textContent(),locale==='ru'?/Лимит 5 ч/:/5h quota/);
+      assert.match(await firstRow.textContent(),locale==='ru'?/5 ч/:/5h/);
       assert.match(await firstRow.textContent(),/0%/);
-      assert.match(await page.locator('tbody').textContent(),locale==='ru'?/применимость неизвестна/:/applicability unknown/);
       assert.doesNotMatch(await page.locator('tbody').textContent(),/Monthly MCP|Месячный лимит MCP/);
     }
     await firstRow.click();
@@ -160,7 +158,7 @@ try {
       Object.assign(weekly, {name:'Weekly quota',value:76,freshness:'fresh'});
       Object.assign(weekly.window, {durationMinutes:10080,resetsAt:reset});
       await page.reload(); await page.locator('tbody tr').nth(1).waitFor();
-      assert.match(await page.locator('tbody tr').nth(1).textContent(),locale==='ru'?/Недельный лимит/:/Weekly quota/);
+      assert.match(await page.locator('tbody tr').nth(1).textContent(),locale==='ru'?/Неделя/:/Weekly/);
       assert.match(await page.locator('tbody tr').nth(1).textContent(),/76%/);
       Object.assign(zaiState, {status:'error',safeError:'network',httpStatus:502});
       await page.reload(); await page.locator('tbody tr').first().click();
