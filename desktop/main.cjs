@@ -1,12 +1,13 @@
 const {app, BrowserWindow, Menu, Tray, nativeImage, screen, session, powerMonitor} = require('electron');
 const {mkdirSync, readFileSync, writeFileSync, statSync} = require('node:fs');
-const {spawn} = require('node:child_process');
+const {spawn, execFileSync} = require('node:child_process');
 const http = require('node:http');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {corners, position} = require('./position.cjs');
 
 app.setName('Resource Monitor');
+if (process.platform === 'win32') app.setAppUserModelId('org.local.resource-monitor.widget');
 if (process.env.MONITOR_WIDGET_USER_DATA) {
   const userData=process.env.MONITOR_WIDGET_USER_DATA;
   if (!path.isAbsolute(userData)) throw Error('Widget user data path must be absolute');
@@ -99,10 +100,29 @@ if (!app.requestSingleInstanceLock()) {
     app.on('before-quit', () => {quitting=true;clearTimeout(retryTimer);clearTimeout(navigationTimer);});
 
     const labelSets = {
-      ru: {show:'Показать', hide:'Скрыть', top:'Поверх окон', refresh:'Обновить', exit:'Выход', display:'Экран', corner:'Угол', missing:'Недоступен', corners:['Сверху слева','Сверху справа','Снизу слева','Снизу справа']},
-      en: {show:'Show', hide:'Hide', top:'Always on top', refresh:'Refresh', exit:'Exit', display:'Display', corner:'Corner', missing:'Unavailable', corners:['Top left','Top right','Bottom left','Bottom right']}
+      ru: {show:'Показать', hide:'Скрыть', top:'Поверх окон', startup:'Запускать при входе', refresh:'Обновить', exit:'Выход', display:'Экран', corner:'Угол', missing:'Недоступен', corners:['Сверху слева','Сверху справа','Снизу слева','Снизу справа']},
+      en: {show:'Show', hide:'Hide', top:'Always on top', startup:'Open at login', refresh:'Refresh', exit:'Exit', display:'Display', corner:'Corner', missing:'Unavailable', corners:['Top left','Top right','Bottom left','Bottom right']}
     };
     let labels = labelSets.en;
+    const loginName = 'org.local.resource-monitor.widget';
+    const loginOptions = {path:process.execPath, args:[]};
+    const loginItems = () => app.getLoginItemSettings(loginOptions).launchItems;
+    const loginEnabled = () => {
+      try {
+        return loginItems().some(item =>
+          item.name === loginName && item.scope === 'user' && item.enabled === true &&
+          item.path.toLowerCase() === process.execPath.toLowerCase() && item.args.length === 0);
+      } catch {return false;}
+    };
+    const loginConflict = () => {
+      try {
+        const registry=execFileSync('reg.exe',['query','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',loginName],{encoding:'utf8',windowsHide:true,timeout:2000,stdio:['ignore','pipe','pipe']});
+        const value=registry.split(/\r?\n/).find(line => line.trimStart().startsWith(`${loginName} `));
+        if (!value) return true;
+        const command=value.match(/\s+REG_SZ\s+(.+)$/)?.[1];
+        return command?.toLowerCase() !== `"${process.execPath}"`.toLowerCase();
+      } catch (error) {return error.status !== 1;}
+    };
     const refresh = () => {
       if (win.webContents.getURL() !== url) return;
       void win.webContents.executeJavaScript("fetch('/api/refresh', {method:'POST'}).then(response => {if (response.ok) return load();}).catch(() => {})").catch(() => {});
@@ -115,6 +135,11 @@ if (!app.requestSingleInstanceLock()) {
         if (!saveSettings({alwaysOnTop: item.checked})) win.setAlwaysOnTop(!item.checked);
         tray.setContextMenu(menu());
       }},
+      ...(process.platform === 'win32' && app.isPackaged ? [{label: labels.startup, type:'checkbox', checked:loginEnabled(), enabled:!loginConflict(), click: item => {
+        if (loginConflict()) return;
+        try {app.setLoginItemSettings({...loginOptions, name:loginName, openAtLogin:item.checked});} catch {}
+        tray.setContextMenu(menu());
+      }}] : []),
       {label: labels.display, submenu: [
         ...screen.getAllDisplays().map((display, index) => ({label: `${display.label || `${labels.display} ${index + 1}`} (${display.id})`, type: 'radio', checked: display.id === settings.displayId, click: () => {
           if (saveSettings({displayId: display.id})) {place(); tray.setContextMenu(menu());}

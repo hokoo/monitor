@@ -2,3 +2,4 @@ config.json
 .monitor-codex/
 .env
 node_modules/
+dist/

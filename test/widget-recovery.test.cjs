@@ -12,7 +12,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 async function boot(port) {
   const profile = mkdtempSync(path.join(tmpdir(), 'monitor-w5-unit-'));
   const app = new EventEmitter();
-  app.setName=app.setPath=()=>{}; app.getPath=()=>profile; app.requestSingleInstanceLock=()=>true; app.whenReady=()=>Promise.resolve();
+  app.setName=app.setPath=app.setAppUserModelId=()=>{}; app.getPath=()=>profile; app.requestSingleInstanceLock=()=>true; app.whenReady=()=>Promise.resolve();
   const powerMonitor = new EventEmitter();
   const screen = new EventEmitter();
   const display={id:1,workArea:{x:0,y:0,width:800,height:600}};

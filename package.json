@@ -5,7 +5,8 @@
   "main": "desktop/main.cjs",
   "scripts": {
     "desktop:setup": "node node_modules/electron/install.js",
-    "desktop": "electron ."
+    "desktop": "electron .",
+    "desktop:package:win": "node scripts/package-windows.cjs"
   },
   "devDependencies": {
     "electron": "45.3.1"
