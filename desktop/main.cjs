@@ -1,6 +1,9 @@
-const {app, BrowserWindow, Menu, Tray, nativeImage, screen, session} = require('electron');
-const {mkdirSync, readFileSync, writeFileSync} = require('node:fs');
+const {app, BrowserWindow, Menu, Tray, nativeImage, screen, session, powerMonitor} = require('electron');
+const {mkdirSync, readFileSync, writeFileSync, statSync} = require('node:fs');
+const {spawn} = require('node:child_process');
+const http = require('node:http');
 const path = require('node:path');
+const {pathToFileURL} = require('node:url');
 const {corners, position} = require('./position.cjs');
 
 app.setName('Resource Monitor');
@@ -16,6 +19,8 @@ if (!app.requestSingleInstanceLock()) {
   const port = process.env.MONITOR_WIDGET_PORT ?? '8765';
   if (!/^\d{1,5}$/.test(port) || Number(port) < 1024 || Number(port) > 65535) throw Error('Invalid widget port');
   const url = `http://127.0.0.1:${port}/`;
+  const offlineFile = path.join(__dirname, 'offline.html');
+  const offlineUrl = pathToFileURL(offlineFile).href;
   let win, tray, quitting = false;
   const settingsFile = () => path.join(app.getPath('userData'), 'widget.json');
   const readSettings = () => {try {const saved=JSON.parse(readFileSync(settingsFile(), 'utf8')); return saved && typeof saved==='object' && !Array.isArray(saved) ? saved : {};} catch {return {};}};
@@ -47,16 +52,51 @@ if (!app.requestSingleInstanceLock()) {
     win.on('close', event => {if (!quitting) {event.preventDefault(); win.hide();}});
     win.webContents.setWindowOpenHandler(() => ({action: 'deny'}));
     win.webContents.on('will-attach-webview', event => event.preventDefault());
-    const allowedDocument = candidate => {try {return new URL(candidate).href===url;} catch {return false;}};
+    const allowedDocument = candidate => {try {return [url, offlineUrl].includes(new URL(candidate).href);} catch {return false;}};
     const currentDocument = () => {try {const current=new URL(win.webContents.getURL());current.hash='';return allowedDocument(current.href);} catch {return false;}};
     win.webContents.on('will-navigate', event => {if (!allowedDocument(event.url)) event.preventDefault();});
     win.webContents.on('will-frame-navigate', event => {if (!event.isMainFrame || !allowedDocument(event.url)) event.preventDefault();});
     win.webContents.on('will-redirect', event => {if (!event.isMainFrame || !allowedDocument(event.url)) event.preventDefault();});
     win.webContents.on('did-finish-load', () => {if (currentDocument()) {
       void win.webContents.insertCSS('.widget-drag{display:block!important;height:18px;-webkit-app-region:drag}');
-      void win.webContents.executeJavaScript('document.documentElement.lang').then(locale => {labels=locale==='ru'?labelSets.ru:labelSets.en;tray?.setContextMenu(menu());}).catch(() => {});
+      if (win.webContents.getURL() === url) void win.webContents.executeJavaScript('document.documentElement.lang').then(locale => {labels=locale==='ru'?labelSets.ru:labelSets.en;tray?.setContextMenu(menu());}).catch(() => {});
     }});
-    void win.loadURL(url).catch(() => {});
+    const probe = () => new Promise(resolve => {
+      const request=http.get(`${url}api/state`, {signal:AbortSignal.timeout(1500)}, response => {const ready=response.statusCode===200;response.destroy();resolve(ready);});
+      request.on('error', () => resolve(false));
+    });
+    const dockerPath = 'C:\\Program Files\\Docker\\Docker\\frontend\\Docker Desktop.exe';
+    let initialProbe=true, retryDelay=1000, retryTimer, navigationTimer, checking=false;
+    const retry = () => {
+      if (quitting) return;
+      retryTimer=setTimeout(async () => {
+        checking=true;
+        const first=initialProbe;
+        initialProbe=false;
+        if (await probe()) {
+          if (quitting) {checking=false;return;}
+          try {
+            await Promise.race([win.loadURL(url),new Promise((_,reject)=>{navigationTimer=setTimeout(()=>{try {win.webContents.stop();} catch {} reject(Error('Navigation timed out'));},5000);})]);
+            clearTimeout(navigationTimer);
+            checking=false;
+            return;
+          } catch {clearTimeout(navigationTimer);if (!quitting) void win.loadFile(offlineFile).catch(() => {});}
+        } else if (first && process.platform==='win32' && port==='8765') {
+          if (quitting) {checking=false;return;}
+          try {if (statSync(dockerPath).isFile()) {const child=spawn(dockerPath,[],{detached:true,stdio:'ignore'});child.on('error',()=>{});child.unref();}} catch {}
+        }
+        retryDelay=Math.min(Math.max(retryDelay*2,1000),10000);
+        checking=false;
+        retry();
+      },retryDelay);
+    };
+    void win.loadFile(offlineFile).catch(() => {});
+    retry();
+    powerMonitor.on('resume', () => {
+      if (win.webContents.getURL() === url) void win.webContents.executeJavaScript('load()').catch(() => {});
+      else if (!checking) {clearTimeout(retryTimer);retryDelay=0;retry();}
+    });
+    app.on('before-quit', () => {quitting=true;clearTimeout(retryTimer);clearTimeout(navigationTimer);});
 
     const labelSets = {
       ru: {show:'Показать', hide:'Скрыть', top:'Поверх окон', refresh:'Обновить', exit:'Выход', display:'Экран', corner:'Угол', missing:'Недоступен', corners:['Сверху слева','Сверху справа','Снизу слева','Снизу справа']},
@@ -64,7 +104,7 @@ if (!app.requestSingleInstanceLock()) {
     };
     let labels = labelSets.en;
     const refresh = () => {
-      if (!currentDocument()) return;
+      if (win.webContents.getURL() !== url) return;
       void win.webContents.executeJavaScript("fetch('/api/refresh', {method:'POST'}).then(response => {if (response.ok) return load();}).catch(() => {})").catch(() => {});
     };
     const menu = () => Menu.buildFromTemplate([

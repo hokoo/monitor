@@ -11,3 +11,4 @@ th:nth-child(1){width:30%}th:nth-child(2){width:37%}th:nth-child(3){width:19%}th
 th:nth-child(1){width:35%}th:nth-child(2){width:43%}th:nth-child(3){width:22%}
 .value-content{display:grid;grid-template-columns:minmax(0,1fr) 6ch}.value-content .bar{width:round(down, 100%, 5px)}.value-content .bar span{width:round(down, var(--fill), 5px)!important}
 .widget-drag{display:none}
+#connection{color:var(--amber);padding:0 0 12px}#connection[hidden]{display:none}

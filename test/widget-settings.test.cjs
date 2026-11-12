@@ -37,6 +37,7 @@ async function boot(profile, displays) {
     }
     on() {}
     loadURL() {return Promise.resolve();}
+    loadFile() {return Promise.resolve();}
     setBounds(bounds) {this.bounds = bounds;}
     isAlwaysOnTop() {return this.topmost;}
     setAlwaysOnTop(value) {this.topmost = value;}
@@ -45,8 +46,8 @@ async function boot(profile, displays) {
   const trays = [];
   const electron = {app, BrowserWindow, Tray:class extends Tray {constructor(...args) {super(...args); trays.push(this);}},
     Menu:{setApplicationMenu() {}, buildFromTemplate:items=>items}, nativeImage:{createFromPath:()=>({})}, screen,
-    session:{defaultSession:{setPermissionRequestHandler() {},setPermissionCheckHandler() {}}}};
-  vm.runInNewContext(readFileSync(main,'utf8'),{require:name=>name==='electron'?electron:mainRequire(name),__dirname:path.dirname(main),process:{env:{MONITOR_WIDGET_PORT:'18765',MONITOR_WIDGET_USER_DATA:profile}},URL});
+    session:{defaultSession:{setPermissionRequestHandler() {},setPermissionCheckHandler() {}}},powerMonitor:new EventEmitter()};
+  vm.runInNewContext(readFileSync(main,'utf8'),{require:name=>name==='electron'?electron:mainRequire(name),__dirname:path.dirname(main),process:{env:{MONITOR_WIDGET_PORT:'18765',MONITOR_WIDGET_USER_DATA:profile}},URL,setTimeout:()=>0,clearTimeout:()=>{}});
   await new Promise(resolve=>setImmediate(resolve));
   return {screen, win:windows[0], tray:trays[0]};
 }
