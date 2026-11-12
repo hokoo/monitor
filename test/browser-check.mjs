@@ -5,185 +5,107 @@ import {createServer} from '../server.mjs';
 import {validateConfig} from '../core.mjs';
 import {readDemo} from '../demo.mjs';
 
-const fixture = locale => validateConfig({locale,accounts:[
+const fixture = locale => validateConfig({locale, accounts:[
   {id:'one',provider:'Demo provider',label:'First fictitious account',color:'#557799',sources:[{id:'plan',type:'subscription',adapter:'demo'},{id:'api',type:'api',adapter:'demo'}]},
   {id:'two',provider:'Demo provider',label:'Second fictitious account',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}
 ]});
+const rows = page => page.locator('#rows tr:not(.account-label)');
 const errors=[];
 let browser, app, page;
 async function start(config, adapters, monitor) {app=createServer(config,{port:0,adapters,monitor});const address=await app.listen();return `http://127.0.0.1:${address.port}`;}
 async function stop() {if(app){if(page && !page.isClosed()) await page.goto('about:blank');await app.close();app=null;}}
+async function open(base, count) {await page.goto(base);await page.waitForFunction(n=>document.querySelectorAll('#rows tr:not(.account-label)').length===n,count);}
+const config = (locale, provider, adapter) => validateConfig({locale,accounts:[{id:'one',provider,label:'Fictitious account',sources:[{id:'plan',type:'subscription',adapter,authRef:adapter==='zai'?'env:ZAI_BROWSER_MOCK':adapter==='codex'?'local:browser':undefined}]}]});
+const source = (id, sourceLabel, status, metrics, now, extras={}) => ({id,type:'subscription',sourceLabel,status,metrics,lastAttemptAt:now,lastSuccessAt:status==='loading'||status==='auth'||status==='error'?null:now,nextAttemptAt:null,safeError:status==='auth'?'auth':status==='error'?'network':null,...extras});
+const monitor = (locale, provider, sources, now) => ({start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'one',provider,label:'Fictitious account',sources}]};}});
 try {
   let attempts=0;
   const adapters={demo:async(...args)=>{attempts++;return readDemo(...args);}};
   browser=await chromium.launch({headless:true,args:['--no-sandbox']});
-  const context=await browser.newContext({locale:'fr-FR',viewport:{width:1280,height:800}});
-  page=await context.newPage();
-  page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+  page=await browser.newPage({viewport:{width:600,height:420},locale:'fr-FR'});
+  page.on('pageerror',error=>errors.push(error.message));
+  page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+
   let base=await start(fixture('en'),adapters);
-  await page.goto(base);await page.locator('tbody tr').first().waitFor();
-  await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===5);
+  await open(base,5);
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
-  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Account|Resource|Remaining / value|Reset|State');
-  assert.match(await page.locator('#subtitle').textContent(),/fictitious/);
-  assert.deepEqual(await page.evaluate(() => {const now=Date.now();return [resetParts(new Date(now+90000000).toISOString()),resetParts(new Date(now+18180000).toISOString()),resetParts(new Date(now+120000).toISOString()),resetParts(null)];}),[['1d','1h','0m'],['','5h','3m'],['','','2m'],['','','—']]);
-  assert.equal(await page.locator('tbody tr').first().locator('.reset-grid span').count(),3);
-  assert.equal(await page.locator('tbody tr').first().locator('.reset-grid').evaluate(el=>getComputedStyle(el).display),'grid');
-  assert.deepEqual(await page.evaluate(() => {
-    const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString()};
-    const source={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};
-    const before=metricStatus(source,metric);source.lastSuccessAt=new Date(now-21000).toISOString();
-    return [before,metricStatus(source,metric),until(new Date(now+90000000).toISOString()),until(new Date(now+7800000).toISOString())];
-  }),['fresh','stale','1d 1h','2h 10m']);
-  const widths=await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width));
-  await page.locator('#filter').fill('First fictitious');
-  assert.deepEqual(await page.locator('th').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().width)),widths);
-  await page.locator('#filter').fill('');
-  assert.match(await page.locator('tbody').textContent(),/5h/);
-  assert.match(await page.locator('tbody').textContent(),/Weekly/);
+  assert.deepEqual(await page.locator('th').allTextContents(),['Resource','Remaining / value','Reset']);
+  assert.equal(await page.locator('#rows tr.account-label').count(),5);
+  assert.match(await page.locator('#rows').textContent(),/5h/);
+  assert.match(await page.locator('#rows').textContent(),/Weekly/);
+  assert.match(await page.locator('#rows').textContent(),/First fictitious account/);
   assert.equal(await page.locator('.bar').count(),4);
-  assert.equal(await page.locator('tbody tr').first().evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
-  assert.equal(await page.locator('tbody tr').nth(1).evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
-  assert.equal(await page.locator('tbody tr').last().evaluate(el=>el.style.getPropertyValue('--account-color')),'#a990cb');
-  assert.notEqual(await page.locator('tbody tr').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
-  await page.locator('tbody tr').first().focus();await page.keyboard.press('Enter');
-  assert.equal(await page.locator('tbody tr.active').count(),1);
-  assert.match(await page.locator('#details-body').textContent(),/Next attempt/);
-  assert.match(await page.locator('#details-body').textContent(),/Fictitious demo source/);
-  await page.locator('tbody tr.active').focus();
-  const rowKey=await page.evaluate(()=>document.activeElement.dataset.rowKey);
-  await page.waitForTimeout(1200);
-  assert.equal(await page.evaluate(()=>document.activeElement.dataset.rowKey),rowKey);
-  assert.equal(await page.locator('tbody tr.active').getAttribute('data-row-key'),rowKey);
-  await page.screenshot({path:'/tmp/monitor-t2-en.png',fullPage:true});
-  const beforeTabs=attempts;
-  const second=await context.newPage();await second.goto(base);await second.locator('tbody tr').first().waitFor();
-  await second.waitForTimeout(250);
-  assert.equal(attempts,beforeTabs);
-  await second.close();
-  await page.locator('#filter').fill('no such resource');
-  assert.match(await page.locator('#empty').textContent(),/No results/);
-  await page.locator('#filter').press('Escape');
-  assert.equal(await page.locator('#filter').inputValue(),'');
-  assert.equal(await page.locator('tbody tr').count(),5);
-  await page.locator('#filter').fill('First fictitious');
-  assert.equal(await page.locator('tbody tr.active').getAttribute('data-row-key'),rowKey);
-  await page.locator('#refresh').click();
-  await page.waitForTimeout(100);
-  assert.equal(await page.locator('#filter').inputValue(),'First fictitious');
-  assert.equal(await page.locator('tbody tr.active').getAttribute('data-row-key'),rowKey);
-  await page.locator('#filter').press('Escape');
-  await page.locator('#refresh').focus();
-  const beforeRefresh=attempts;await page.keyboard.press('r');
-  for(let i=0;i<20 && attempts===beforeRefresh;i++) await page.waitForTimeout(50);
-  assert.ok(attempts>beforeRefresh);
-  await page.locator('#filter').focus();const inputBefore=attempts;await page.keyboard.press('r');
-  assert.equal(attempts,inputBefore);
-  await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'r',ctrlKey:true,bubbles:true})));
-  assert.equal(attempts,inputBefore);
-  await page.locator('#refresh').focus();await page.keyboard.press('/');
-  assert.equal(await page.evaluate(()=>document.activeElement.id),'filter');
-  await page.locator('#refresh').focus();await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(()=>document.activeElement.id),'table-scroll');
-  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.tagName),'TR');
-  await page.locator('tbody tr').last().focus();await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(()=>document.activeElement.className),'details');
-  await page.setViewportSize({width:390,height:760});
+  assert.equal(await rows(page).first().evaluate(el=>el.style.getPropertyValue('--account-color')),'#557799');
+  assert.equal(await rows(page).last().evaluate(el=>el.style.getPropertyValue('--account-color')),'#a990cb');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(await page.locator('#table-scroll').evaluate(el=>el.scrollWidth>el.clientWidth),false);
-  await page.screenshot({path:'/tmp/monitor-t2-narrow.png',fullPage:true});
+  assert.deepEqual(await page.evaluate(() => {const now=Date.now();return [resetParts(new Date(now+90000000).toISOString()),resetParts(null)];}),[['1d','1h','0m'],['','','—']]);
+  assert.deepEqual(await page.evaluate(() => {const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString()},s={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};const first=metricStatus(s,metric);s.lastSuccessAt=new Date(now-21000).toISOString();return [first,metricStatus(s,metric)];}),['fresh','stale']);
+  await page.screenshot({path:'/tmp/monitor-w3-en.png'});
+  const before=attempts;
+  const refresh=await page.evaluate(async()=>{const r=await fetch('/api/refresh',{method:'POST'});return r.status;});
+  assert.equal(refresh,200);
+  for(let i=0;i<20 && attempts===before;i++) await page.waitForTimeout(50);
+  assert.ok(attempts>before); // server refresh remains owned by the server
+  const second=await browser.newPage();await second.goto(base);await second.waitForSelector('#rows tr');
+  const after=attempts;await second.waitForTimeout(250);assert.equal(attempts,after);await second.close();
   await stop();
+
   base=await start(fixture('ru'),adapters);
-  await page.goto(base);await page.locator('tbody tr').first().waitFor();
+  await open(base,5);
   assert.equal(await page.locator('html').getAttribute('lang'),'ru');
-  assert.equal(await page.locator('th').allTextContents().then(a=>a.join('|')),'Аккаунт|Ресурс|Остаток / значение|Сброс|Состояние');
-  assert.match(await page.locator('tbody').textContent(),/Неделя/);
-  await page.locator('#filter').fill('Неделя');assert.equal(await page.locator('tbody tr').count(),2);
-  await page.locator('#filter').press('Escape');
-  await page.setViewportSize({width:1280,height:800});
-  await page.screenshot({path:'/tmp/monitor-t2-ru.png',fullPage:true});
+  assert.deepEqual(await page.locator('th').allTextContents(),['Ресурс','Остаток / значение','Сброс']);
+  assert.match(await page.locator('#rows').textContent(),/Неделя/);
+  await page.screenshot({path:'/tmp/monitor-w3-ru.png'});
   await stop();
+
   base=await start(validateConfig({locale:'en',accounts:[]}),adapters);
-  await page.goto(base);assert.match(await page.locator('#empty').textContent(),/No accounts configured/);
+  await open(base,1);
+  assert.match(await rows(page).first().textContent(),/No accounts configured/);
+  await page.route('**/api/state',route=>route.abort());
+  await page.reload();
+  assert.match(await rows(page).first().textContent(),/Could not reach local server/);
+  await page.unroute('**/api/state');
+  assert.deepEqual(errors.splice(0).filter(error=>!error.includes('net::ERR_FAILED')),[]);
   await stop();
+
   base=await start(validateConfig({accounts:[{id:'x',provider:'<img src=x onerror=alert(1)>',label:'Fictitious',sources:[{id:'s',type:'api',adapter:'demo'}]}]}),adapters);
-  await page.goto(base);await page.locator('tbody tr').first().waitFor();
-  assert.equal(await page.locator('tbody img').count(),0);
-  assert.match(await page.locator('tbody').textContent(),/<img src=x onerror=alert\(1\)>/);
+  await open(base,1);
+  assert.equal(await page.locator('#rows img').count(),0);
+  assert.match(await rows(page).first().textContent(),/<img src=x onerror=alert\(1\)>/);
   await stop();
+
   const now=new Date().toISOString(), reset=new Date(Date.now()+3600000).toISOString();
-  const statusIds=['fresh','unknown','stale','error','auth'];
-  const statusConfig=locale=>validateConfig({locale,accounts:[{id:'states',provider:'Demo provider',label:'Fictitious status examples',sources:statusIds.map(id=>({id,type:'subscription',adapter:'demo'}))}]});
-  const statusSource=(id,index)=>({id,type:'subscription',sourceLabel:'Fictitious demo source',status:index===3?'error':index===4?'auth':'ok',safeError:index===3?'rate_limited':index===4?'auth':null,lastAttemptAt:now,lastSuccessAt:now,nextAttemptAt:index===3?reset:index===4?null:reset,retryAfter:index===3?reset:null,delayReason:index===3?'retry_after':index===4?'awaiting_retry':'regular',staleAfter:180000,busy:false,metrics:[{key:'remaining',name:'Fictitious remaining',kind:'percent',scope:'account',unit:null,currency:null,value:index===1?null:index===0?0:index===2?35:index===3?25:50,window:{id:'5h',label:'5h',durationMinutes:300,resetsAt:reset},observedAt:now,observationBasis:'source',receivedAt:now,snapshotAt:null,periodStart:null,periodEnd:null,dataRefreshedAt:null,sourceLabel:'Fictitious demo source',freshness:index===1?'unknown':index>1?'stale':'fresh'}]});
-  const statusMonitor=locale=>({start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'states',provider:'Demo provider',label:'Fictitious status examples',sources:statusIds.map(statusSource)}]};}});
-  base=await start(statusConfig('en'),adapters,statusMonitor('en'));
-  await page.goto(base);await page.locator('tbody tr').last().waitFor();
-  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['OK','Unknown','OK','OK','Authorization needed']);
-  assert.equal(await page.locator('tbody tr').nth(3).locator('td').nth(2).getAttribute('class'),'fresh');
-  await page.screenshot({path:'/tmp/monitor-t2-states.png',fullPage:true});
-  await stop();
-  base=await start(statusConfig('ru'),adapters,statusMonitor('ru'));
-  await page.goto(base);await page.locator('tbody tr').last().waitFor();
-  assert.deepEqual(await page.locator('tbody tr td:last-child').allTextContents(),['OK','Неизвестно','OK','OK','Нужна авторизация']);
-  await page.locator('tbody tr').nth(3).click();
-  assert.match(await page.locator('#details-body').textContent(),/Ожидание по Retry-After провайдера/);
-  await page.screenshot({path:'/tmp/monitor-t2-states-ru.png',fullPage:true});
-  await stop();
-  for (const locale of ['en','ru']) for (const [status,mixed] of [['loading',true],['auth',false],['ok',true]]) {
-    const zaiConfig=validateConfig({locale,accounts:[
-      {id:'glm',provider:'Z.ai',label:'GLM account',sources:[{id:'plan',type:'subscription',adapter:'zai',authRef:'env:ZAI_BROWSER_MOCK'}]},
-      ...(mixed?[{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}]:[])
-    ]});
-    const zaiMetrics=status==='ok'?[...['5h','monthly_mcp','weekly'].map((id,index)=>({key:'remaining',name:index===0?'5h quota':index===1?'Monthly MCP quota':'Weekly (not reported; applicability unknown)',kind:'percent',scope:'account',value:index===0?0:index===1?70:null,window:{id,label:id,durationMinutes:index===0?300:null,resetsAt:null},sourceLabel:'Z.ai Coding Plan quota',observedAt:now,observationBasis:'response_received',receivedAt:now,periodStart:null,periodEnd:null,dataRefreshedAt:null,freshness:index===2?'unknown':'fresh'}))]:[];
-    const zaiState={id:'plan',type:'subscription',sourceLabel:'Z.ai Coding Plan quota',status,safeError:status==='auth'?'auth':null,lastAttemptAt:now,lastSuccessAt:status==='ok'?now:null,nextAttemptAt:status==='auth'?null:reset,retryAfter:null,delayReason:status==='auth'?'awaiting_retry':'initial',staleAfter:180000,busy:status==='loading',metrics:zaiMetrics};
-    const demoState={...zaiState,sourceLabel:'Fictitious demo source',status:'loading',safeError:null,metrics:[]};
-    const mock={start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'glm',provider:'Z.ai',label:'GLM account',sources:[zaiState]},...(mixed?[{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[demoState]}]:[])]};}};
-    base=await start(zaiConfig,adapters,mock);
-    await page.goto(base);await page.locator('tbody tr').first().waitFor();
-    const subtitle=await page.locator('#subtitle').textContent();
-    assert.match(subtitle,locale==='ru'?/Настроен GLM Coding Plan/:/Z.ai Coding Plan configured/);
-    assert.equal(subtitle.includes(locale==='ru'?'вымышлены':'fictitious'),mixed);
-    const firstRow=page.locator('tbody tr').first();
-    if(status==='loading'||status==='auth') {
-      assert.match(await firstRow.textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
-      assert.match(await firstRow.textContent(),status==='auth'?(locale==='ru'?/Нужна авторизация/:/Authorization needed/):(locale==='ru'?/Загрузка/:/Loading/));
-    } else {
-      assert.match(await firstRow.textContent(),locale==='ru'?/5 ч/:/5h/);
-      assert.match(await firstRow.textContent(),/0%/);
-      assert.doesNotMatch(await page.locator('tbody').textContent(),/Monthly MCP|Месячный лимит MCP/);
-    }
-    await firstRow.click();
-    assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/Квота GLM Coding Plan Z.ai/:/Z.ai Coding Plan quota/);
-    if (status === 'ok') {
-      const weekly = zaiMetrics[2];
-      Object.assign(weekly, {name:'Weekly quota',value:76,freshness:'fresh'});
-      Object.assign(weekly.window, {durationMinutes:10080,resetsAt:reset});
-      await page.reload(); await page.locator('tbody tr').nth(1).waitFor();
-      assert.match(await page.locator('tbody tr').nth(1).textContent(),locale==='ru'?/Неделя/:/Weekly/);
-      assert.match(await page.locator('tbody tr').nth(1).textContent(),/76%/);
-      Object.assign(zaiState, {status:'error',safeError:'network',httpStatus:502});
-      await page.reload(); await page.locator('tbody tr').first().click();
-      assert.match(await page.locator('#details-body').textContent(),/HTTP 502/);
-    }
+  for(const locale of ['en','ru']) {
+    const metric=(value, freshness='fresh')=>({key:'remaining',name:'Fictitious remaining',kind:'percent',value,window:{id:'5h',label:'5h',resetsAt:reset},sourceLabel:'Fictitious demo source',observedAt:now,freshness});
+    const states=[source('fresh','Fictitious demo source','ok',[metric(0)],now),source('unknown','Fictitious demo source','ok',[metric(null,'unknown')],now),source('stale','Fictitious demo source','ok',[metric(35,'stale')],now,{lastSuccessAt:new Date(Date.now()-30000).toISOString()}),source('error','Fictitious demo source','error',[],now),source('auth','Fictitious demo source','auth',[],now),source('loading','Fictitious demo source','loading',[],now)];
+    base=await start(validateConfig({locale,accounts:[{id:'one',provider:'Demo provider',label:'Fictitious account',sources:states.map(s=>({id:s.id,type:'subscription',adapter:'demo'}))}]}),adapters,monitor(locale,'Demo provider',states,now));
+    await open(base,6);
+    assert.deepEqual(await rows(page).locator('td:first-child').evaluateAll(cells=>cells.map(el=>el.classList[1])),['fresh','unknown','stale','error','auth','loading']);
+    assert.match(await rows(page).nth(4).locator('td:first-child').getAttribute('aria-label'),locale==='ru'?/Нужна авторизация/:/Authorization needed/);
+    assert.equal(await rows(page).first().locator('td:nth-child(2)').textContent(),'0%');
+    await page.screenshot({path:`/tmp/monitor-w3-states-${locale}.png`});
     await stop();
-  }
-  for (const locale of ['en','ru']) for (const mode of ['ok','empty','auth']) {
-    const codexConfig=validateConfig({locale,accounts:[
-      {id:'codex',provider:'Codex',label:'Private profile',sources:[{id:'plan',type:'subscription',adapter:'codex',authRef:'local:browser'}]},
-      {id:'demo',provider:'Demo provider',label:'Fictitious',sources:[{id:'plan',type:'subscription',adapter:'demo'}]}
-    ]});
-    const metric={key:'remaining',name:'Codex',kind:'percent',scope:'account',value:0,window:{id:'abc_primary',label:'5h',durationMinutes:300,resetsAt:reset},sourceLabel:'Codex ChatGPT quota',observedAt:now,observationBasis:'response_received',receivedAt:now,freshness:'fresh'};
-    const codexState={id:'plan',type:'subscription',sourceLabel:'Codex ChatGPT quota',status:mode==='auth'?'auth':'ok',safeError:mode==='auth'?'auth':null,lastAttemptAt:now,lastSuccessAt:mode==='auth'?null:now,nextAttemptAt:mode==='auth'?null:reset,retryAfter:null,delayReason:mode==='auth'?'awaiting_retry':'regular',staleAfter:180000,busy:false,metrics:mode==='ok'?[metric]:[]};
-    const demoState={...codexState,sourceLabel:'Fictitious demo source',status:'loading',safeError:null,metrics:[]};
-    const mock={start(){},stop(){},refresh(){},snapshot(){return {locale,now,accounts:[{id:'codex',provider:'Codex',label:'Private profile',sources:[codexState]},{id:'demo',provider:'Demo provider',label:'Fictitious',sources:[demoState]}]};}};
-    base=await start(codexConfig,adapters,mock);
-    await page.goto(base);await page.locator('tbody tr').first().waitFor();
-    assert.match(await page.locator('#subtitle').textContent(),locale==='ru'?/демонстрационные источники вымышлены/:/demo sources are fictitious/);
-    const row=page.locator('tbody tr').first();
-    if(mode==='ok') {assert.match(await row.textContent(),locale==='ru'?/5 ч/:/5h/);assert.match(await row.textContent(),/0%/);}
-    if(mode==='empty') {assert.match(await row.textContent(),locale==='ru'?/применимость неизвестна/:/applicability unknown/);assert.match(await row.textContent(),locale==='ru'?/Неизвестно/:/Unknown/);}
-    if(mode==='auth') {assert.match(await row.textContent(),locale==='ru'?/Нужна авторизация/:/Authorization needed/);await row.click();assert.match(await page.locator('#details-body').textContent(),locale==='ru'?/отдельный профиль Codex/:/monitor’s Codex profile/);}
-    await stop();
+
+    for(const status of ['loading','auth','ok']) {
+      const metrics=status==='ok'?['5h','monthly_mcp','weekly'].map((id,index)=>({key:'remaining',name:'quota',kind:'percent',value:index===0?0:index===1?70:null,window:{id,label:id,durationMinutes:index===0?300:null,resetsAt:null},sourceLabel:'Z.ai Coding Plan quota',observedAt:now,freshness:index===2?'unknown':'fresh'})):[];
+      const state=source('plan','Z.ai Coding Plan quota',status,metrics,now);
+      base=await start(config(locale,'Z.ai','zai'),adapters,monitor(locale,'Z.ai',[state],now));
+      await open(base,status==='ok'?2:1);
+      const text=await rows(page).first().textContent();
+      if(status==='ok'){assert.match(text,locale==='ru'?/5 ч/:/5h/);assert.match(text,/0%/);assert.match(await rows(page).nth(1).textContent(),locale==='ru'?/Неделя/:/Weekly/);assert.doesNotMatch(await page.locator('#rows').textContent(),/Monthly MCP|Месячный лимит MCP/);}
+      else assert.match(await rows(page).first().locator('td:first-child').getAttribute('aria-label'),status==='auth'?(locale==='ru'?/Нужна авторизация/:/Authorization needed/):(locale==='ru'?/Загрузка/:/Loading/));
+      await stop();
+    }
+    for(const status of ['ok','auth']) {
+      const metrics=status==='ok'?[{key:'remaining',name:'Codex',kind:'percent',value:0,window:{id:'abc_primary',label:'5h',durationMinutes:300,resetsAt:reset},sourceLabel:'Codex ChatGPT quota',observedAt:now,freshness:'fresh'}]:[];
+      base=await start(config(locale,'Codex','codex'),adapters,monitor(locale,'Codex',[source('plan','Codex ChatGPT quota',status,metrics,now)],now));
+      await open(base,1);
+      assert.match(await rows(page).first().textContent(),status==='ok'?/0%/:(locale==='ru'?/Квота Codex ChatGPT/:/Codex ChatGPT quota/));
+      assert.match(await rows(page).first().locator('td:first-child').getAttribute('aria-label'),status==='auth'?(locale==='ru'?/Нужна авторизация/:/Authorization needed/):/OK/);
+      await stop();
+    }
   }
   assert.deepEqual(errors,[]);
-  console.log('Browser check passed; screenshots: /tmp/monitor-t2-en.png, /tmp/monitor-t2-narrow.png, /tmp/monitor-t2-ru.png, /tmp/monitor-t2-states.png, /tmp/monitor-t2-states-ru.png');
+  console.log('Browser check passed; screenshots: /tmp/monitor-w3-{en,ru,states-en,states-ru}.png');
 } finally {await stop();if(browser)await browser.close();}

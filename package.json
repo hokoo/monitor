@@ -1,0 +1,13 @@
+{
+  "name": "resource-monitor-widget",
+  "private": true,
+  "version": "0.1.0",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop:setup": "node node_modules/electron/install.js",
+    "desktop": "electron ."
+  },
+  "devDependencies": {
+    "electron": "45.3.1"
+  }
+}

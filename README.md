@@ -33,5 +33,23 @@ Missing tokens and HTTP 401/403 pause the affected source until manual Refresh. 
 Optional server environment variables: `MONITOR_CONFIG` points to a config JSON file; `MONITOR_PORT` sets the port (default 8765); `MONITOR_HOST` is `127.0.0.1` by default or `0.0.0.0` for the container. No URL or command-line argument accepts secrets.
 
 Run focused tests with `node --test test/core.test.mjs test/zai.test.mjs test/server.test.mjs`.
-On a Linux host with the preinstalled global Playwright package, run the browser check with `node test/browser-check.mjs`. It starts and stops its own loopback servers and writes screenshots to `/tmp/monitor-t2-*.png`.
+On a Linux host with the preinstalled global Playwright package, run the browser check with `node test/browser-check.mjs`. It starts and stops its own loopback servers and writes screenshots to `/tmp/monitor-w3-*.png`.
 Run Codex protocol and isolation tests with `node --test test/codex.test.mjs`. Run `node test/smoke-codex.mjs` to check the installed app-server using a fresh empty private profile; it expects “login needed” and never opens a login flow or makes model calls.
+
+## Windows widget (W3)
+
+On Windows 10 x64, start the existing server, then run `npm ci`, `npm run desktop:setup`, and `npm run desktop` from this directory in a Windows terminal. Electron 45.3.1 is pinned in the lockfile; its binary is installed by the explicit setup command. The window opens at 600×420 DIP in the primary display's upper-right work area. Drag the narrow strip above the table. The tray menu shows, hides, refreshes, toggles always-on-top, and exits the widget; closing the window hides it. A second launch restores the existing window. The tray language follows the server's `locale` on a successful page load. This shell does not start Docker or register Windows startup yet.
+
+The synthetic Windows run proved the absent visible frame/menu, initial topmost-off state, close-to-hide, second-launch restore, drag strip, and non-drag table area. Windows UI Automation could not locate the tray icon, so Show/Hide, topmost persistence, Refresh, Exit, and Russian tray labels still need manual evidence; there is no complete `smoke.json`. To check the remaining actions without production accounts, start `MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs` in WSL, then run this in Windows PowerShell (replace `$work` with the printed `prepared_work` path if different):
+
+```powershell
+$work = 'C:\Users\iTRON\AppData\Local\Temp\monitor-w3-smoke-46364'
+$env:MONITOR_WIDGET_PORT = '18765'
+$env:MONITOR_WIDGET_USER_DATA = Join-Path $work 'profile-manual-en'
+$widget = Start-Process (Join-Path $work 'node_modules\electron\dist\electron.exe') -ArgumentList ('"{0}"' -f $work) -PassThru
+(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18766/refreshes).Content
+```
+
+Use this widget's tray to Hide and Show it, toggle Always on top, and choose Refresh; read `/refreshes` again and confirm the count increased. Check `profile-manual-en\widget.json` for `alwaysOnTop:true`, choose Exit, and confirm `$widget.WaitForExit(5000)` returns `True`. Relaunch with the same profile to confirm the topmost setting, then Exit. For Russian labels, stop the fixture, restart it with `MONITOR_WIDGET_LOCALE=ru MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs`, set `MONITOR_WIDGET_USER_DATA` to a fresh `profile-manual-ru`, and repeat the tray checks. Stop the fixture after the checks.
+
+Version/support references: [Electron stable releases](https://releases.electronjs.org/?channel=stable), [supported major policy](https://www.electronjs.org/docs/latest/tutorial/electron-timelines), [Windows 10 compatibility](https://www.electronjs.org/docs/latest/breaking-changes/), and [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security/).
