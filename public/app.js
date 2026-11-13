@@ -33,10 +33,10 @@ function metricStatus(source, metric) {
   if (connection === 'offline') return metric?.value == null ? 'unknown' : 'stale';
   if (source.status === 'auth') return 'auth';
   if (!source.lastSuccessAt) return source.status === 'error' ? 'error' : 'loading';
-  if (Date.now() - Date.parse(source.lastSuccessAt) > 2 * (source.pollIntervalMs ?? 10000)) return 'stale';
   if (!metric || metric.value == null || !metric.observedAt) return 'unknown';
   if (metric.kind === 'unsupported') return 'unsupported';
-  if (metric.missing || (metric.window?.resetsAt && Date.now() >= Date.parse(metric.window.resetsAt))) return 'stale';
+  if (source.status === 'error' || metric.freshness === 'stale' || metric.missing || (metric.window?.resetsAt && Date.now() >= Date.parse(metric.window.resetsAt)) || Date.now() - Date.parse(source.lastSuccessAt) > 2 * (source.pollIntervalMs ?? 10000)) return 'stale';
+  if (metric.freshness === 'unknown') return 'unknown';
   return 'fresh';
 }
 function metricValue(metric) {

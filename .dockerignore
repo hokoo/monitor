@@ -8,3 +8,5 @@ SPEC.md
 README.md
 test
 *.log
+dist/
+node_modules/

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {chromium} from '/home/itron/.npm-global/lib/node_modules/@playwright/test/index.mjs';
 import {createServer} from '../server.mjs';
-import {validateConfig} from '../core.mjs';
+import {createMonitor, validateConfig} from '../core.mjs';
 import {readDemo} from '../demo.mjs';
 
 const fixture = locale => validateConfig({locale, accounts:[
@@ -40,7 +40,11 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(await page.locator('#table-scroll').evaluate(el=>el.scrollWidth>el.clientWidth),false);
   assert.deepEqual(await page.evaluate(() => {const now=Date.now();return [resetParts(new Date(now+90000000).toISOString()),resetParts(null)];}),[['1d','1h','0m'],['','','—']]);
-  assert.deepEqual(await page.evaluate(() => {const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString()},s={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};const first=metricStatus(s,metric);s.lastSuccessAt=new Date(now-21000).toISOString();return [first,metricStatus(s,metric)];}),['fresh','stale']);
+  assert.deepEqual(await page.evaluate(() => {
+    const now=Date.now(), metric={value:1,observedAt:new Date(now).toISOString(),freshness:'fresh'}, source={status:'ok',pollIntervalMs:10000,lastSuccessAt:new Date(now-19000).toISOString()};
+    const status=(s={},m={})=>metricStatus({...source,...s},{...metric,...m});
+    return [status(),status({lastSuccessAt:new Date(now-21000).toISOString()}),status({lastSuccessAt:new Date(now-21000).toISOString()},{value:null}),status({lastSuccessAt:new Date(now-21000).toISOString()},{observedAt:null}),status({status:'error'}),status({},{freshness:'stale'}),status({},{freshness:'unknown'}),status({},{window:{resetsAt:new Date(now-1).toISOString()}}),status({status:'auth'}),status({},{kind:'unsupported'}),status({status:'loading',lastSuccessAt:null})];
+  }),['fresh','stale','unknown','unknown','stale','stale','unknown','stale','auth','unsupported','loading']);
   await page.screenshot({path:'/tmp/monitor-w3-en.png'});
   const before=attempts;
   const refresh=await page.evaluate(async()=>{const r=await fetch('/api/refresh',{method:'POST'});return r.status;});
@@ -77,6 +81,30 @@ try {
 
   const now=new Date().toISOString(), reset=new Date(Date.now()+3600000).toISOString();
   for(const locale of ['en','ru']) {
+    let time=Date.now(), reads=0;
+    const liveConfig=config(locale,'Demo provider','demo');
+    const liveMonitor=createMonitor(liveConfig,{demo:async()=>{
+      if(++reads>1) throw Error('synthetic read failure');
+      return {passive:true,metrics:[
+        {key:'old',name:'Old observation',kind:'percent',scope:'account',value:35,observedAt:new Date(time-600000).toISOString(),sourceLabel:'Fictitious demo source'},
+        {key:'current',name:'Current observation',kind:'percent',scope:'account',value:50,observedAt:new Date(time).toISOString(),sourceLabel:'Fictitious demo source'}
+      ]};
+    }},{now:()=>time,staleMs:60000});
+    base=await start(liveConfig,{},liveMonitor);
+    await open(base,2);
+    assert.deepEqual(liveMonitor.snapshot().accounts[0].sources[0].metrics.map(metric=>metric.freshness),['stale','fresh']);
+    assert.deepEqual(await rows(page).locator('td:first-child').evaluateAll(cells=>cells.map(el=>el.classList[1])),['stale','fresh']);
+    time+=10000;liveMonitor.tick();
+    for(let i=0;i<20 && liveMonitor.snapshot().accounts[0].sources[0].status!=='error';i++) await page.waitForTimeout(20);
+    const failed=liveMonitor.snapshot().accounts[0].sources[0];
+    assert.equal(failed.status,'error');assert.ok(Date.now()-Date.parse(failed.lastSuccessAt)<20000);
+    assert.deepEqual(failed.metrics.map(metric=>metric.freshness),['stale','stale']);
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelectorAll('#rows tr:not(.account-label)').length===2);
+    assert.deepEqual(await rows(page).locator('td:first-child').evaluateAll(cells=>cells.map(el=>el.classList[1])),['stale','stale']);
+    assert.match(await rows(page).nth(1).locator('td:first-child').getAttribute('aria-label'),locale==='ru'?/Устарело|STALE/:/STALE/);
+    await stop();
+
     const metric=(value, freshness='fresh')=>({key:'remaining',name:'Fictitious remaining',kind:'percent',value,window:{id:'5h',label:'5h',resetsAt:reset},sourceLabel:'Fictitious demo source',observedAt:now,freshness});
     const states=[source('fresh','Fictitious demo source','ok',[metric(0)],now),source('unknown','Fictitious demo source','ok',[metric(null,'unknown')],now),source('stale','Fictitious demo source','ok',[metric(35,'stale')],now,{lastSuccessAt:new Date(Date.now()-30000).toISOString()}),source('error','Fictitious demo source','error',[],now),source('auth','Fictitious demo source','auth',[],now),source('loading','Fictitious demo source','loading',[],now)];
     base=await start(validateConfig({locale,accounts:[{id:'one',provider:'Demo provider',label:'Fictitious account',sources:states.map(s=>({id:s.id,type:'subscription',adapter:'demo'}))}]}),adapters,monitor(locale,'Demo provider',states,now));
