@@ -56,7 +56,7 @@ async function until(label,check,limit=15000){
 }
 try {
   const inspectorPort=await freePort();
-  child=spawn(electronExe,[`--inspect=127.0.0.1:${inspectorPort}`,work],{env:{...process.env,MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:path.join(work,'profile')},stdio:['ignore','ignore','pipe']});
+  child=spawn(electronExe,[`--inspect=127.0.0.1:${inspectorPort}`,work],{env:{...process.env,ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:path.join(work,'profile')},stdio:['ignore','ignore','pipe']});
   child.stderr.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-4000);});
   let target;
   await until('main inspector',async()=>{if(isStopped())throw Error(`Electron exited early: ${stderr}`);try{target=(await fetch(`http://127.0.0.1:${inspectorPort}/json/list`).then(r=>r.json()))[0];}catch{}return target?.webSocketDebuggerUrl;});
@@ -65,7 +65,7 @@ try {
   socket.onmessage=event=>{const message=JSON.parse(event.data),entry=pending.get(message.id);if(entry){pending.delete(message.id);message.error?entry.reject(Error(message.error.message)):entry.resolve(message.result);}};
   const initialMs=await until('offline window',async()=>{const state=await main("w&&{count:e.BrowserWindow.getAllWindows().length,url:w.webContents.getURL()}");return state?.count===1&&state.url.startsWith('file:')&&state.url.endsWith('/offline.html');});
   assert.match(await renderer('document.body.innerText'),/Waiting for local server/);
-  second=spawn(electronExe,[work],{env:{...process.env,MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:path.join(work,'profile')},stdio:'ignore'});
+  second=spawn(electronExe,[work],{env:{...process.env,ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:path.join(work,'profile')},stdio:'ignore'});
   await Promise.race([new Promise(resolve=>second.once('exit',resolve)),wait(5000)]);
   assert.equal(second.exitCode,0,'second launch did not exit cleanly');
   assert.equal(await main('e.BrowserWindow.getAllWindows().length'),1);

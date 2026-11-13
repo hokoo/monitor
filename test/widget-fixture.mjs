@@ -4,7 +4,7 @@ import {createMonitor, validateConfig} from '../core.mjs';
 import {readDemo} from '../demo.mjs';
 import http from 'node:http';
 
-const port=Number(process.env.MONITOR_WIDGET_PORT ?? 18765);
+const port=Number(process.env.ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT ?? 18765);
 if (!Number.isInteger(port)||port<1024||port>65534) throw Error('Invalid fixture port');
 let reads=0;
 let refreshes=0;

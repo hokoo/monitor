@@ -76,7 +76,7 @@ Missing tokens and authorization errors pause the affected source until manual R
 
 To change the backend port, set `MONITOR_PORT=18765` (or another free port) in `.env`, then run `docker compose up -d --force-recreate monitor`. Open `http://127.0.0.1:18765/`. Compose uses this value for the server listener, published localhost port, and healthcheck; the default is `8765`. Keep the internal and published ports equal so the server's Host/Origin checks continue to work.
 
-For the Windows widget, set `MONITOR_WIDGET_PORT` to the same value in its Windows environment before launching it (for example, `$env:MONITOR_WIDGET_PORT = '18765'` in PowerShell). The widget does not read the Docker `.env` file. For launch at login, persist this variable in your Windows user environment and sign out and back in. Automatic Docker Desktop launch is available only on the default port; on a custom port, start Docker yourself.
+For the Windows widget, set `ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT` to the same value in its Windows environment before launching it (for example, `$env:ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT = '18765'` in PowerShell). The widget does not read the Docker `.env` file. For launch at login, persist this variable in your Windows user environment and sign out and back in. Automatic Docker Desktop launch is available only on the default port; on a custom port, start Docker yourself.
 
 For direct development runs, `MONITOR_CONFIG` points to a config JSON file, `MONITOR_PORT` sets the listener port, and `MONITOR_HOST` defaults to `127.0.0.1`. Compose fixes the config path and sets the container listener host to `0.0.0.0`, while publishing only on host loopback. No URL or command-line argument accepts secrets.
 

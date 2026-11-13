@@ -37,7 +37,7 @@ async function until(label,check,limit=15000){
 }
 async function launch(){
   const inspectorPort=await freePort();
-  const proc=spawn(exe,[`--inspect=127.0.0.1:${inspectorPort}`],{env:{...process.env,MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:profile},stdio:['ignore','ignore','pipe']});
+  const proc=spawn(exe,[`--inspect=127.0.0.1:${inspectorPort}`],{env:{...process.env,ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:profile},stdio:['ignore','ignore','pipe']});
   proc.stderr.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-4000);});
   let target;
   await until('inspector',async()=>{if(proc.exitCode!==null)throw Error(`portable exe exited: ${stderr}`);try{target=(await fetch(`http://127.0.0.1:${inspectorPort}/json/list`).then(r=>r.json()))[0];}catch{}return target?.webSocketDebuggerUrl;});
@@ -91,7 +91,7 @@ try {
   if(original[0]) await main(`e.app.setLoginItemSettings(${JSON.stringify({openAtLogin:true,path:original[0].path,args:original[0].args,name,enabled:original[0].enabled})})`);
   assert.deepEqual(await ownItems(),original);
   touched=false;
-  second=spawn(exe,[],{env:{...process.env,MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:profile},stdio:'ignore'});
+  second=spawn(exe,[],{env:{...process.env,ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:profile},stdio:'ignore'});
   await Promise.race([new Promise(resolve=>second.once('exit',resolve)),wait(5000)]);
   assert.equal(second.exitCode,0,'second portable launch did not exit');
   assert.equal(await main('e.BrowserWindow.getAllWindows().length'),1);

@@ -37,7 +37,7 @@ async function boot(port) {
   const http={get(_url,_options,callback) {requests++;const request=new EventEmitter();queueMicrotask(()=>available ? callback({statusCode:200,destroy() {}}) : request.emit('error',Error('offline')));return request;}};
   const spawn=(_path,_args,options)=>{assert.equal(_path,'C:\\Program Files\\Docker\\Docker\\frontend\\Docker Desktop.exe');assert.equal(options.detached,true);assert.equal(options.stdio,'ignore');launches++;const child=new EventEmitter();child.unref=()=>{};return child;};
   const originalRequire=require('node:module').createRequire(main);
-  vm.runInNewContext(readFileSync(main,'utf8'),{require:name=>name==='electron'?electron:name==='node:http'?http:name==='node:child_process'?{spawn}:name==='node:fs'?{...originalRequire(name),statSync:()=>({isFile:()=>true})}:originalRequire(name),__dirname:path.dirname(main),process:{env:{MONITOR_WIDGET_PORT:String(port),MONITOR_WIDGET_USER_DATA:profile},platform:'win32'},URL,AbortSignal,setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{const index=timers.indexOf(timer);if(index>=0)timers.splice(index,1);}});
+  vm.runInNewContext(readFileSync(main,'utf8'),{require:name=>name==='electron'?electron:name==='node:http'?http:name==='node:child_process'?{spawn}:name==='node:fs'?{...originalRequire(name),statSync:()=>({isFile:()=>true})}:originalRequire(name),__dirname:path.dirname(main),process:{env:{ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:port == null ? undefined : String(port),MONITOR_WIDGET_PORT:"29999",MONITOR_WIDGET_USER_DATA:profile},platform:'win32'},URL,AbortSignal,setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{const index=timers.indexOf(timer);if(index>=0)timers.splice(index,1);}});
   await tick();
   return {profile,app,powerMonitor,windows,timers,online:()=>{available=true;},offline:()=>{available=false;},failNavigation:()=>{navigationFails=true;},hangNavigation:()=>{navigationHangs=true;},get launches(){return launches;},get requests(){return requests;},async step(){const timer=timers.shift();assert.ok(timer,'retry timer missing');timer.fn();await tick();await tick();}};
 }
@@ -94,5 +94,13 @@ test('navigation timeout returns to bounded bootstrap retry', async () => {
     await shell.step();
     assert.equal(shell.timers[0].delay,2000);
     assert.equal(shell.windows.length,1);
+  } finally {shell.app.emit('before-quit');rmSync(shell.profile,{recursive:true,force:true});}
+});
+
+test('unrelated legacy port variable does not change the default widget URL', async () => {
+  const shell=await boot();
+  try {
+    shell.online(); await shell.step();
+    assert.equal(shell.windows[0].webContents.getURL(),'http://127.0.0.1:8765/');
   } finally {shell.app.emit('before-quit');rmSync(shell.profile,{recursive:true,force:true});}
 });

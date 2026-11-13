@@ -61,7 +61,7 @@ async function boot(profile, displays, loginItems) {
     if(!item)throw Object.assign(Error('not found'),{status:1});
     return `    ${item.name}    REG_SZ    "${item.path}"\r\n`;
   }}:mainRequire(name);
-  vm.runInNewContext(readFileSync(main,'utf8'),{require:requireMock,__dirname:path.dirname(main),process:{env:{MONITOR_WIDGET_PORT:'18765',MONITOR_WIDGET_USER_DATA:profile},platform:loginItems?'win32':'linux',execPath:portableExe},URL,setTimeout:()=>0,clearTimeout:()=>{}});
+  vm.runInNewContext(readFileSync(main,'utf8'),{require:requireMock,__dirname:path.dirname(main),process:{env:{ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT:'18765',MONITOR_WIDGET_USER_DATA:profile},platform:loginItems?'win32':'linux',execPath:portableExe},URL,setTimeout:()=>0,clearTimeout:()=>{}});
   await new Promise(resolve=>setImmediate(resolve));
   return {screen, win:windows[0], tray:trays[0], app};
 }

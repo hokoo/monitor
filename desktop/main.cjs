@@ -17,7 +17,7 @@ if (process.env.MONITOR_WIDGET_USER_DATA) {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  const port = process.env.MONITOR_WIDGET_PORT ?? '8765';
+  const port = process.env.ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT ?? '8765';
   if (!/^\d{1,5}$/.test(port) || Number(port) < 1024 || Number(port) > 65535) throw Error('Invalid widget port');
   const url = `http://127.0.0.1:${port}/`;
   const offlineFile = path.join(__dirname, 'offline.html');

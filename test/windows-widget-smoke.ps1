@@ -1,4 +1,4 @@
-﻿# Run on Windows while `MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs` runs in WSL.
+﻿# Run on Windows while `ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs` runs in WSL.
 # Uses a private temporary app copy and profile. PrepareOnly installs the runtime once.
 param([int]$Port = 18765, [string]$RepoRoot = (Split-Path $PSScriptRoot -Parent), [string]$PreparedWork, [switch]$PrepareOnly, [switch]$WaitForCdp, [ValidateSet('en','ru')][string]$Locale='en')
 $ErrorActionPreference = 'Stop'
@@ -20,7 +20,7 @@ if(-not $PreparedWork) {
 }
 if(-not (Test-Path (Join-Path $work 'node_modules\electron\dist\electron.exe'))) { throw "Prepared Windows Electron missing: $work" }
 if($PrepareOnly) { Write-Output "prepared_work=$work"; exit 0 }
-$env:MONITOR_WIDGET_PORT = "$Port"
+$env:ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT = "$Port"
 $env:MONITOR_WIDGET_USER_DATA = Join-Path $work "profile-$Locale"
 $menuLabels=if($Locale -eq 'ru'){@{show='Показать';hide='Скрыть';top='Поверх окон';refresh='Обновить';exit='Выход'}}else{@{show='Show';hide='Hide';top='Always on top';refresh='Refresh';exit='Exit'}}
 $state = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$Port/api/state"

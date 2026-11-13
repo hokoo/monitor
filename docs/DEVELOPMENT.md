@@ -6,17 +6,17 @@ Run Codex protocol, isolation, and container login helper tests with `node --tes
 
 Focused checks: `node --test test/widget-position.test.cjs test/widget-settings.test.cjs test/widget-recovery.test.cjs`, `node test/browser-recovery.mjs`, and, with an isolated synthetic Windows run, `powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\wsl.localhost\Ubuntu-20.04\home\itron\reps\monitor\test\widget-recovery-native.ps1'`. The native script uses a fresh temporary app/profile, the previously prepared Electron executable, and only port 18765; it starts and stops its own synthetic fixture. It reports measured recovery intervals. Real sleep and cold Windows login still require physical checks.
 
-The synthetic Windows run proved the absent visible frame/menu, initial topmost-off state, close-to-hide, second-launch restore, drag strip, and non-drag table area. Windows UI Automation could not locate the tray icon, so Show/Hide, topmost persistence, Refresh, Exit, and Russian tray labels still need manual evidence; there is no complete `smoke.json`. To check the final portable exe without production accounts, start `MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs` in WSL, then run this in Windows PowerShell using the permanent install folder from above:
+The synthetic Windows run proved the absent visible frame/menu, initial topmost-off state, close-to-hide, second-launch restore, drag strip, and non-drag table area. Windows UI Automation could not locate the tray icon, so Show/Hide, topmost persistence, Refresh, Exit, and Russian tray labels still need manual evidence; there is no complete `smoke.json`. To check the final portable exe without production accounts, start `ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs` in WSL, then run this in Windows PowerShell using the permanent install folder from above:
 
 ```powershell
 $install = Join-Path $env:LOCALAPPDATA 'Resource Monitor\Portable'
-$env:MONITOR_WIDGET_PORT = '18765'
+$env:ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT = '18765'
 $env:MONITOR_WIDGET_USER_DATA = Join-Path $env:TEMP 'monitor-widget-manual-en'
 $widget = Start-Process -FilePath (Join-Path $install 'Resource Monitor.exe') -PassThru
 (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18766/refreshes).Content
 ```
 
-Use this widget's tray to Hide and Show it, toggle Always on top, and choose Refresh; read `/refreshes` again and confirm the count increased. Check `$env:MONITOR_WIDGET_USER_DATA\widget.json` for `alwaysOnTop:true`, choose Exit, and confirm `$widget.WaitForExit(5000)` returns `True`. Relaunch with the same profile to confirm the topmost setting, then Exit. For Russian labels, stop the fixture, restart it with `MONITOR_WIDGET_LOCALE=ru MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs`, set `MONITOR_WIDGET_USER_DATA` to a fresh `monitor-widget-manual-ru` folder under `$env:TEMP`, and repeat the tray checks. Stop the fixture after the checks.
+Use this widget's tray to Hide and Show it, toggle Always on top, and choose Refresh; read `/refreshes` again and confirm the count increased. Check `$env:MONITOR_WIDGET_USER_DATA\widget.json` for `alwaysOnTop:true`, choose Exit, and confirm `$widget.WaitForExit(5000)` returns `True`. Relaunch with the same profile to confirm the topmost setting, then Exit. For Russian labels, stop the fixture, restart it with `MONITOR_WIDGET_LOCALE=ru ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT=18765 node test/widget-fixture.mjs`, set `MONITOR_WIDGET_USER_DATA` to a fresh `monitor-widget-manual-ru` folder under `$env:TEMP`, and repeat the tray checks. Stop the fixture after the checks.
 
 Version/support references: [Electron stable releases](https://releases.electronjs.org/?channel=stable), [supported major policy](https://www.electronjs.org/docs/latest/tutorial/electron-timelines), [Windows 10 compatibility](https://www.electronjs.org/docs/latest/breaking-changes/), and [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security/).
 

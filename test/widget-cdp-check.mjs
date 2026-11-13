@@ -1,6 +1,6 @@
 // Run with Windows Node 24 against a private smoke instance paused with -WaitForCdp.
 import assert from 'node:assert/strict';
-const port=Number(process.env.MONITOR_WIDGET_PORT ?? 18765);
+const port=Number(process.env.ITRON_AI_RESOURCE_MONITOR_WIDGET_PORT ?? 18765);
 const base=`http://127.0.0.1:${port}/`;
 const readyOnly=process.argv.includes('--ready-only');
 const targetsUrl='http://127.0.0.1:18767/json/list';
