@@ -15,17 +15,8 @@ services:
     ports:
       - "127.0.0.1:${MONITOR_PORT:-8765}:${MONITOR_PORT:-8765}"
     volumes:
-      - type: bind
-        source: ./config.json
-        target: /app/config.json
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./.monitor-codex
-        target: /app/.monitor-codex
-        bind:
-          create_host_path: false
+      - ./config.json:/app/config.json:ro
+      - ./.monitor-codex:/app/.monitor-codex
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.MONITOR_PORT + '/api/state').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
