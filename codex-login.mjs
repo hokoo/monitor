@@ -11,7 +11,7 @@ if (!alias) {
   let profile, child;
   try {
     profile = await claimProfile(alias);
-    child = spawn('codex', ['-c', 'cli_auth_credentials_store="file"', 'login'], {cwd: profile.home, env: childEnv(profile.home), stdio: 'inherit'});
+    child = spawn('codex', ['-c', 'cli_auth_credentials_store="file"', 'login', '--device-auth'], {cwd: profile.home, env: childEnv(profile.home), stdio: 'inherit'});
     let hardKill;
     const stop = () => {child.kill('SIGTERM'); hardKill ??= setTimeout(() => child.kill('SIGKILL'), 1000);};
     process.on('SIGINT', stop); process.on('SIGTERM', stop);
