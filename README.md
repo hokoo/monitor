@@ -1,8 +1,33 @@
 # Resource monitor
 
-Local monitor screen and polling loop. Demo amounts are fictitious. Codex ChatGPT subscription-limit and GLM Coding Plan quota adapters are available; real accounts need authorization and live verification. OpenAI API, Claude, and Z.ai Standard API credits are not connected.
+Resource Monitor is a local dashboard for keeping an eye on your AI subscription quotas across multiple accounts. It shows remaining usage, reset times, and source status in a browser or an optional **Windows desktop widget**. It monitors limits; it is not a chat client and does not send model prompts.
 
 ![Resource monitor screenshot](docs/screenshot.png)
+
+## Supported AI services
+
+| Service | What is supported now | Authorization |
+| --- | --- | --- |
+| OpenAI Codex with a ChatGPT subscription | Subscription usage windows returned by Codex, including 5-hour and weekly limits when available | Codex device login in Docker, with a separate local profile per account |
+| Z.ai GLM Coding Plan | Subscription quotas, including 5-hour and weekly pools when returned by the provider | A Coding Plan token per account, supplied through `.env` |
+| Demo | Fictitious subscription and API values for trying the interface | None |
+
+OpenAI API balances, Claude/Anthropic, and Z.ai Standard API credits are **not connected yet**. Available metrics depend on what each provider returns; missing data stays unknown and previously fetched data is marked stale when updates fail. Z.ai uses an undocumented quota endpoint that may change. Live validation is still incomplete; see the integration notes below.
+
+## Stack and platforms
+
+- **Server:** JavaScript ES modules on Node.js 24, using Node's built-in HTTP server. No database is required; the latest readings are cached in memory.
+- **Web interface:** plain HTML, CSS, and JavaScript, with English and Russian locales, automatic polling, and manual refresh.
+- **Runtime:** Docker with Docker Compose 2.24+. The image includes Node.js and Codex CLI; neither needs to be installed on the host for monitoring or account login.
+- **Configuration:** `config.json` for accounts, sources, labels, colors, and locale; `.env` for provider tokens; a private `.monitor-codex` directory for persistent Codex profiles. The dashboard is exposed only on localhost by default.
+- **Current platform setup:** a Linux filesystem for the Docker checkout and profile permissions, including WSL on Windows. The optional desktop client targets Windows 10 x64 and uses Electron 45.3.1, with tray controls, display/corner selection, and an optional launch-at-login setting.
+- **Desktop development:** building the Windows widget needs Node.js/npm on Windows. Running the packaged widget does not; it connects to the Docker server. Native Linux/macOS desktop packages and full cross-platform validation are not provided yet, and some physical Windows acceptance checks remain open.
+
+To get started, follow the Docker Compose setup below. You can try the demo without any AI account, then configure one or more real accounts. The Windows widget is optional: the same dashboard is available at `http://127.0.0.1:8765/`.
+
+## Contributions welcome
+
+Want to help expand the functionality or make Resource Monitor work on more platforms? You're very welcome! New AI provider integrations, additional quota metrics, Linux/macOS desktop support, Windows improvements, testing, documentation, and translations are all welcome. Open an issue to share an idea or report a problem, or send a pull request. Please use demo data or redact account details in screenshots and reports, and never include tokens or login credentials. See [development checks](docs/DEVELOPMENT.md) and the [project plan](docs/PLAN.md) for context and outstanding work.
 
 ## Docker Compose
 
@@ -49,7 +74,11 @@ Z.ai displays remaining GLM Coding Plan quota, not Standard API credits or a bil
 
 Missing tokens and authorization errors pause the affected source until manual Refresh. Other accounts continue independently. The current credit schema and token eligibility have been checked with one live Z.ai account; comparison with the provider UI and isolation of two live accounts remain unverified.
 
-Optional server environment variables: `MONITOR_CONFIG` points to a config JSON file; `MONITOR_PORT` sets the port (default 8765); `MONITOR_HOST` is `127.0.0.1` by default or `0.0.0.0` for the container. No URL or command-line argument accepts secrets.
+To change the backend port, set `MONITOR_PORT=18765` (or another free port) in `.env`, then run `docker compose up -d --force-recreate monitor`. Open `http://127.0.0.1:18765/`. Compose uses this value for the server listener, published localhost port, and healthcheck; the default is `8765`. Keep the internal and published ports equal so the server's Host/Origin checks continue to work.
+
+For the Windows widget, set `MONITOR_WIDGET_PORT` to the same value in its Windows environment before launching it (for example, `$env:MONITOR_WIDGET_PORT = '18765'` in PowerShell). The widget does not read the Docker `.env` file. For launch at login, persist this variable in your Windows user environment and sign out and back in. Automatic Docker Desktop launch is available only on the default port; on a custom port, start Docker yourself.
+
+For direct development runs, `MONITOR_CONFIG` points to a config JSON file, `MONITOR_PORT` sets the listener port, and `MONITOR_HOST` defaults to `127.0.0.1`. Compose fixes the config path and sets the container listener host to `0.0.0.0`, while publishing only on host loopback. No URL or command-line argument accepts secrets.
 
 
 ## Windows widget

@@ -11,9 +11,9 @@ services:
     environment:
       MONITOR_CONFIG: /app/config.json
       MONITOR_HOST: 0.0.0.0
-      MONITOR_PORT: 8765
+      MONITOR_PORT: ${MONITOR_PORT:-8765}
     ports:
-      - "127.0.0.1:8765:8765"
+      - "127.0.0.1:${MONITOR_PORT:-8765}:${MONITOR_PORT:-8765}"
     volumes:
       - type: bind
         source: ./config.json
@@ -27,7 +27,7 @@ services:
         bind:
           create_host_path: false
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/api/state').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.MONITOR_PORT + '/api/state').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 10s
