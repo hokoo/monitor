@@ -4,6 +4,50 @@ Resource Monitor is a local dashboard for keeping an eye on your AI subscription
 
 ![Resource monitor screenshot](docs/screenshot.png)
 
+## Get Started
+
+**Prerequisites:** Git and a running Docker installation with Compose 2.24+. Run these commands in a Linux terminal or WSL, under your regular user, with the checkout on the Linux filesystem (for example, `~/monitor`). On Windows, start Docker Desktop and enable integration with your WSL distribution. No host Node.js or Codex installation is needed.
+
+**1. Download and prepare a fresh installation.**
+
+```sh
+git clone https://github.com/hokoo/monitor.git
+cd monitor
+cp config.example.json config.json
+umask 077
+mkdir -p .monitor-codex
+printf 'MONITOR_UID=%s\nMONITOR_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+```
+
+**2. Start the demo.**
+
+```sh
+docker compose up -d --build
+```
+
+Open **http://127.0.0.1:8765/**. The demo uses fictitious values and needs no accounts. To use another port, add `MONITOR_PORT=18765` to `.env` before starting and open that port instead.
+
+**3. Connect your accounts.** Replace the demo contents of `config.json` with the appropriate example, remove accounts you do not need, and set `locale` to `en` or `ru`:
+
+- **Codex/ChatGPT:** use `config.codex.example.json` (it also includes a GLM account; remove it if unused). Stop the monitor, then log in once for each retained alias, such as `personal` or `work`:
+
+```sh
+docker compose stop monitor
+docker compose run --rm -it --no-deps monitor node codex-login.mjs personal
+```
+
+Open the printed URL in your browser and enter the one-time code. Repeat the login command for any other alias in your config.
+
+- **GLM Coding Plan:** use `config.glm.example.json`, or keep the GLM entry in the combined example. Edit the private `.env` file and add the tokens named by your chosen config: `ZAI_PLAN_ONE_TOKEN` / `ZAI_PLAN_TWO_TOKEN` for the GLM example, or `ZAI_MONITOR_TOKEN` for the combined example. Keep your existing UID/GID and port settings.
+
+**4. Apply your configuration.**
+
+```sh
+docker compose up -d --force-recreate monitor
+```
+
+Refresh the page. Use `docker compose logs -f monitor` to inspect the service and `docker compose down` to stop it. For the optional desktop client, follow [Windows widget](#windows-widget); for profile permissions and other settings, see [Docker Compose](#docker-compose).
+
 ## Supported AI services
 
 | Service | What is supported now | Authorization |
